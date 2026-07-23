@@ -102,15 +102,24 @@ fn polygon_from_rings(rings: Vec<Vec<Position>>) -> Option<Polygon<f64>> {
 }
 
 fn line_string(coords: Vec<Position>) -> Option<LineString<f64>> {
+    if coords.len() < 4 {
+        return None;
+    }
+
     let points = coords
         .into_iter()
         .map(|coord| {
-            Some(Coord {
-                x: *coord.as_slice().first()?,
-                y: *coord.as_slice().get(1)?,
-            })
+            let values = coord.as_slice();
+            let x = *values.first()?;
+            let y = *values.get(1)?;
+            (x.is_finite() && y.is_finite()).then_some(Coord { x, y })
         })
         .collect::<Option<Vec<_>>>()?;
+
+    if points.first()? != points.last()? {
+        return None;
+    }
+
     Some(LineString::from(points))
 }
 

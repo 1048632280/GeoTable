@@ -1,8 +1,16 @@
 use super::boundary::{AdminIndex, AdminPolygon};
-use crate::model::{Dataset, Geometry};
+use crate::model::{Dataset, Geometry, WarningCode};
 use geo::{Contains, Point};
 
 pub fn enrich_dataset(mut dataset: Dataset, index: &AdminIndex) -> Dataset {
+    if dataset
+        .warnings
+        .iter()
+        .any(|warning| warning.code == WarningCode::NonWgs84 && warning.record_id.is_none())
+    {
+        return dataset;
+    }
+
     for record in &mut dataset.records {
         let Some(Geometry::Point { lon, lat }) = record.geometry else {
             continue;
