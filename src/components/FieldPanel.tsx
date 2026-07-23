@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { getUniqueValues } from "../lib/filtering"
+import { applyFilters, getUniqueValues } from "../lib/filtering"
 import type { Dataset, FeatureRecord, FilterState } from "../types/geo"
 
 type FieldPanelProps = {
@@ -9,7 +9,7 @@ type FieldPanelProps = {
   onFilterChange: (next: FilterState) => void
 }
 
-export function FieldPanel({ dataset, records, filter, onFilterChange }: FieldPanelProps) {
+export function FieldPanel({ dataset, filter, onFilterChange }: FieldPanelProps) {
   const [fieldSearch, setFieldSearch] = useState("")
   const [selectedField, setSelectedField] = useState<string | null>(null)
 
@@ -20,10 +20,12 @@ export function FieldPanel({ dataset, records, filter, onFilterChange }: FieldPa
     )
   }, [dataset, fieldSearch])
 
-  const values = useMemo(
-    () => (selectedField ? getUniqueValues(records, selectedField).slice(0, 200) : []),
-    [records, selectedField],
-  )
+  const values = useMemo(() => {
+    if (!dataset || !selectedField) return []
+    const { [selectedField]: _excluded, ...fieldFilters } = filter.fieldFilters
+    const records = applyFilters(dataset.records, { ...filter, fieldFilters })
+    return getUniqueValues(records, selectedField).slice(0, 200)
+  }, [dataset, filter, selectedField])
 
   function toggleValue(value: string) {
     if (!selectedField) return

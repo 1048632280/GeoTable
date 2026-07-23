@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { buildStats } from "../lib/filtering"
 import type { FeatureRecord, FieldDefinition } from "../types/geo"
 
@@ -18,12 +18,20 @@ export function StatsPanel({
   onAddFieldFilter,
 }: StatsPanelProps) {
   const stats = useMemo(() => buildStats(records, selectedField), [records, selectedField])
+  const [copyError, setCopyError] = useState(false)
 
   async function copyStats() {
+    setCopyError(false)
     const text = stats
       .map((row) => `${row.value}\t${row.count}\t${(row.ratio * 100).toFixed(2)}%`)
       .join("\n")
-    await navigator.clipboard.writeText(text)
+    try {
+      const clipboard = globalThis.navigator.clipboard
+      if (!clipboard) throw new Error("Clipboard unavailable")
+      await clipboard.writeText(text)
+    } catch {
+      setCopyError(true)
+    }
   }
 
   return (
@@ -32,6 +40,7 @@ export function StatsPanel({
         <h2>统计</h2>
         <button type="button" onClick={copyStats} disabled={stats.length === 0}>复制</button>
       </div>
+      {copyError && <small role="status">复制失败</small>}
       <select
         className="text-input"
         value={selectedField}

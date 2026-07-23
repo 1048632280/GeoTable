@@ -16,6 +16,11 @@ const initialFilter: FilterState = {
   sort: null,
 }
 
+function withoutFieldFilter(filter: FilterState, field: string): FilterState {
+  const { [field]: _excluded, ...fieldFilters } = filter.fieldFilters
+  return { ...filter, fieldFilters }
+}
+
 export default function App() {
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const [filter, setFilter] = useState<FilterState>(initialFilter)
@@ -27,6 +32,10 @@ export default function App() {
   const filteredRecords = useMemo(
     () => (dataset ? applyFilters(dataset.records, filter) : []),
     [dataset, filter],
+  )
+  const statsRecords = useMemo(
+    () => (dataset ? applyFilters(dataset.records, withoutFieldFilter(filter, statsField)) : []),
+    [dataset, filter, statsField],
   )
 
   async function handleOpen() {
@@ -118,7 +127,7 @@ export default function App() {
         </div>
         <StatsPanel
           fields={dataset?.fields ?? []}
-          records={filteredRecords}
+          records={statsRecords}
           selectedField={statsField}
           onSelectedFieldChange={setStatsField}
           onAddFieldFilter={addFieldFilter}

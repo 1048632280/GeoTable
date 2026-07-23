@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { applyFilters } from "./lib/filtering"
+import { StatsPanel } from "./components/StatsPanel"
 import type { Dataset } from "./types/geo"
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -16,20 +16,18 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
 }))
 
-vi.mock("./lib/filtering", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./lib/filtering")>()),
-  applyFilters: vi.fn(),
-}))
-
 const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
 const invokeMock = vi.mocked(invoke)
-const applyFiltersMock = vi.mocked(applyFilters)
+const writeTextMock = vi.fn()
 
 const teaDataset: Dataset = {
   fileName: "tea.kml",
   totalRecords: 1,
-  fields: [{ name: "name", source: "original" }],
+  fields: [
+    { name: "name", source: "original" },
+    { name: "admin_country", source: "derived" },
+  ],
   records: [
     {
       id: 1,
@@ -50,7 +48,7 @@ const teaAndCoffeeDataset: Dataset = {
       id: 2,
       geometry: { type: "Point", lon: 103.8, lat: 24.5 },
       properties: { name: "咖啡" },
-      derived: { admin_country: "中国", admin_level1: "云南" },
+      derived: { admin_country: "越南", admin_level1: "林同" },
     },
   ],
 }
@@ -66,7 +64,7 @@ function deferred<T>() {
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    applyFiltersMock.mockImplementation((records) => records)
+    writeTextMock.mockResolvedValue(undefined)
   })
 
   it("renders the initial workbench toolbar state", () => {
@@ -83,9 +81,9 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "导出 CSV" })).toBeDisabled()
   })
 
-  it("updates search text and field filters from the workbench panels", async () => {
+  it("updates search text and supports multi-value filters for the same field", async () => {
     openMock.mockResolvedValueOnce("tea.kml")
-    invokeMock.mockResolvedValueOnce(teaDataset)
+    invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)
     const user = userEvent.setup()
 
     render(<App />)
@@ -93,17 +91,79 @@ describe("App", () => {
     await screen.findByText("已就绪")
 
     await user.type(screen.getByPlaceholderText("全局搜索，例如：茶"), "茶")
-    expect(applyFiltersMock).toHaveBeenLastCalledWith(
-      teaDataset.records,
-      expect.objectContaining({ searchText: "茶" }),
-    )
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+
+    await user.clear(screen.getByPlaceholderText("全局搜索，例如：茶"))
 
     await user.click(screen.getByRole("button", { name: "name原始" }))
     await user.click(screen.getByRole("checkbox", { name: "茶树1" }))
     expect(screen.getByRole("checkbox", { name: "茶树1" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "咖啡1" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("checkbox", { name: "咖啡1" }))
+    expect(screen.getByRole("checkbox", { name: "茶树1" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "咖啡1" })).toBeChecked()
 
     await user.click(screen.getByRole("button", { name: "清除筛选" }))
     expect(screen.getByRole("checkbox", { name: "茶树1" })).not.toBeChecked()
+  })
+
+  it("allows filtering consecutive statistic rows for the selected field", async () => {
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    await user.selectOptions(screen.getByRole("combobox"), "name")
+    await user.click(screen.getByRole("button", { name: "茶树150.0%" }))
+    expect(screen.getByRole("button", { name: "咖啡150.0%" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "咖啡150.0%" }))
+    expect(screen.getByText("当前结果 2")).toBeInTheDocument()
+  })
+
+  it("copies selected statistics to the clipboard", async () => {
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { clipboard: { writeText: writeTextMock } },
+    })
+    render(
+      <StatsPanel
+        fields={teaAndCoffeeDataset.fields}
+        records={teaAndCoffeeDataset.records}
+        selectedField="name"
+        onSelectedFieldChange={vi.fn()}
+        onAddFieldFilter={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "复制" }))
+
+    await waitFor(() =>
+      expect(writeTextMock).toHaveBeenCalledWith("茶树\t1\t50.00%\n咖啡\t1\t50.00%"),
+    )
+  })
+
+  it("handles clipboard copy failures without rejecting the click handler", async () => {
+    writeTextMock.mockRejectedValueOnce(new Error("clipboard denied"))
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { clipboard: { writeText: writeTextMock } },
+    })
+    render(
+      <StatsPanel
+        fields={teaDataset.fields}
+        records={teaDataset.records}
+        selectedField="name"
+        onSelectedFieldChange={vi.fn()}
+        onAddFieldFilter={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "复制" }))
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("复制失败"))
   })
 
   it("disables opening while an import is running", async () => {
@@ -179,12 +239,12 @@ describe("App", () => {
     openMock.mockResolvedValueOnce("tea.kml")
     invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset).mockResolvedValueOnce(undefined)
     saveMock.mockResolvedValueOnce("tea-filtered.csv")
-    applyFiltersMock.mockImplementationOnce((records) => records.filter((record) => record.id === 1))
 
     render(<App />)
     await userEvent.click(screen.getByRole("button", { name: "打开文件" }))
     expect(await screen.findByText("总样本 2")).toBeInTheDocument()
 
+    await userEvent.type(screen.getByPlaceholderText("全局搜索，例如：茶"), "茶")
     expect(screen.getByText("当前结果 1")).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: "导出 CSV" }))
