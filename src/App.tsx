@@ -112,7 +112,6 @@ export default function App() {
       <section className="workbench-grid">
         <FieldPanel
           dataset={dataset}
-          records={filteredRecords}
           filter={filter}
           onFilterChange={setFilter}
         />

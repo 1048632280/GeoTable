@@ -108,6 +108,32 @@ describe("App", () => {
     expect(screen.getByRole("checkbox", { name: "茶树1" })).not.toBeChecked()
   })
 
+  it("keeps selected values visible when another field narrows candidates", async () => {
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    await user.click(screen.getByRole("button", { name: "admin_country派生" }))
+    await user.click(screen.getByRole("checkbox", { name: "中国1" }))
+    await user.click(screen.getByRole("checkbox", { name: "越南1" }))
+
+    await user.click(screen.getByRole("button", { name: "name原始" }))
+    await user.click(screen.getByRole("checkbox", { name: "茶树1" }))
+    await user.click(screen.getByRole("button", { name: "admin_country派生" }))
+    await user.click(screen.getByRole("checkbox", { name: "中国1" }))
+
+    await user.click(screen.getByRole("button", { name: "name原始" }))
+    const selectedValue = screen.getByRole("checkbox", { name: "茶树0" })
+    expect(selectedValue).toBeChecked()
+
+    await user.click(selectedValue)
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+  })
+
   it("allows filtering consecutive statistic rows for the selected field", async () => {
     openMock.mockResolvedValueOnce("tea.kml")
     invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)
