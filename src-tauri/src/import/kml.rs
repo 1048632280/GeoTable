@@ -1,7 +1,7 @@
 use crate::error::GeoTableError;
 use crate::model::{
-    Dataset, DerivedFields, FeatureRecord, FieldDefinition, FieldSource, FieldValue, Geometry,
-    ImportWarning, WarningCode,
+    unique_source_field_name, Dataset, DerivedFields, FeatureRecord, FieldDefinition, FieldSource,
+    FieldValue, Geometry, ImportWarning, WarningCode,
 };
 use kml::types::{Element, Geometry as KmlGeometry, Placemark};
 use kml::{Kml, KmlReader};
@@ -42,9 +42,18 @@ pub fn import_kml_or_kmz(path: &Path) -> Result<Dataset, GeoTableError> {
     };
 
     let mut field_names = BTreeSet::new();
+    let mut field_mapping = BTreeMap::new();
     let mut records = Vec::new();
     let mut warnings = Vec::new();
-    collect_placemarks(&root, &mut records, &mut field_names, &mut warnings);
+    let mut placemark_id = 1;
+    collect_placemarks(
+        &root,
+        &mut records,
+        &mut field_names,
+        &mut field_mapping,
+        &mut warnings,
+        &mut placemark_id,
+    );
 
     if records.is_empty() {
         return Err(GeoTableError::EmptyKml);
@@ -111,32 +120,57 @@ fn collect_placemarks(
     kml: &Kml,
     records: &mut Vec<FeatureRecord>,
     field_names: &mut BTreeSet<String>,
+    field_mapping: &mut BTreeMap<String, String>,
     warnings: &mut Vec<ImportWarning>,
+    placemark_id: &mut usize,
 ) {
     match kml {
         Kml::Placemark(placemark) => {
-            match placemark_to_record(records.len() + 1, placemark, field_names) {
+            let id = *placemark_id;
+            *placemark_id += 1;
+            match placemark_to_record(id, placemark, field_names, field_mapping) {
                 Ok(record) => records.push(record),
                 Err((code, message)) => warnings.push(ImportWarning {
                     code,
                     message,
-                    record_id: None,
+                    record_id: Some(id),
                 }),
             }
         }
         Kml::KmlDocument(document) => {
             for element in &document.elements {
-                collect_placemarks(element, records, field_names, warnings);
+                collect_placemarks(
+                    element,
+                    records,
+                    field_names,
+                    field_mapping,
+                    warnings,
+                    placemark_id,
+                );
             }
         }
         Kml::Document { elements, .. } => {
             for element in elements {
-                collect_placemarks(element, records, field_names, warnings);
+                collect_placemarks(
+                    element,
+                    records,
+                    field_names,
+                    field_mapping,
+                    warnings,
+                    placemark_id,
+                );
             }
         }
         Kml::Folder(folder) => {
             for element in &folder.elements {
-                collect_placemarks(element, records, field_names, warnings);
+                collect_placemarks(
+                    element,
+                    records,
+                    field_names,
+                    field_mapping,
+                    warnings,
+                    placemark_id,
+                );
             }
         }
         _ => {}
@@ -147,18 +181,19 @@ fn placemark_to_record(
     id: usize,
     placemark: &Placemark,
     field_names: &mut BTreeSet<String>,
+    field_mapping: &mut BTreeMap<String, String>,
 ) -> Result<FeatureRecord, (WarningCode, String)> {
     let (lon, lat) = point_from_placemark(placemark)?;
     let mut properties = BTreeMap::new();
 
     if let Some(name) = placemark.name.clone() {
-        field_names.insert("name".to_string());
-        properties.insert("name".to_string(), FieldValue::String(name));
+        let field_name = resolve_source_field_name("name", field_names, field_mapping);
+        properties.insert(field_name, FieldValue::String(name));
     }
 
     for element in &placemark.children {
         if element.name == "ExtendedData" {
-            collect_extended_data(element, &mut properties, field_names);
+            collect_extended_data(element, &mut properties, field_names, field_mapping);
         }
     }
 
@@ -205,22 +240,42 @@ fn collect_extended_data(
     element: &Element,
     properties: &mut BTreeMap<String, FieldValue>,
     field_names: &mut BTreeSet<String>,
+    field_mapping: &mut BTreeMap<String, String>,
 ) {
-    if element.name == "Data" {
+    if element.name == "Data" || element.name == "SimpleData" {
         if let (Some(name), Some(value)) = (
             element.attrs.get("name"),
-            element
-                .children
-                .iter()
-                .find(|child| child.name == "value")
-                .and_then(|child| child.content.as_ref()),
+            if element.name == "SimpleData" {
+                element.content.as_ref()
+            } else {
+                element
+                    .children
+                    .iter()
+                    .find(|child| child.name == "value")
+                    .and_then(|child| child.content.as_ref())
+            },
         ) {
-            field_names.insert(name.clone());
-            properties.insert(name.clone(), FieldValue::String(value.clone()));
+            let field_name = resolve_source_field_name(name, field_names, field_mapping);
+            properties.insert(field_name, FieldValue::String(value.clone()));
         }
     }
 
     for child in &element.children {
-        collect_extended_data(child, properties, field_names);
+        collect_extended_data(child, properties, field_names, field_mapping);
     }
+}
+
+fn resolve_source_field_name(
+    source_name: &str,
+    field_names: &mut BTreeSet<String>,
+    field_mapping: &mut BTreeMap<String, String>,
+) -> String {
+    if let Some(output_name) = field_mapping.get(source_name) {
+        return output_name.clone();
+    }
+
+    let output_name = unique_source_field_name(source_name, field_names);
+    field_names.insert(output_name.clone());
+    field_mapping.insert(source_name.to_string(), output_name.clone());
+    output_name
 }

@@ -234,13 +234,67 @@ describe("App", () => {
     openMock.mockResolvedValueOnce("tea.kml")
     invokeMock.mockResolvedValueOnce({
       ...teaDataset,
-      warnings: [{ code: "admin_lookup_failed", message: "行政区识别失败" }],
+      warnings: [{ code: "admin_lookup_failed", message: "行政区识别失败", recordId: 7 }],
     })
 
     render(<App />)
     await userEvent.click(screen.getByRole("button", { name: "打开文件" }))
 
     expect(await screen.findByText("部分失败")).toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "导入警告" })).toHaveTextContent(
+      "行政区识别失败（记录 7）",
+    )
+  })
+
+  it("caps rendered statistic rows for high-cardinality fields", () => {
+    const records = Array.from({ length: 250 }, (_, index) => ({
+      id: index + 1,
+      geometry: null,
+      properties: { name: `值${index}` },
+      derived: {},
+    }))
+
+    render(
+      <StatsPanel
+        fields={[{ name: "name", source: "original" }]}
+        records={records}
+        selectedField="name"
+        onSelectedFieldChange={vi.fn()}
+        onAddFieldFilter={vi.fn()}
+      />,
+    )
+
+    expect(document.querySelectorAll(".stats-row")).toHaveLength(200)
+    expect(screen.getByRole("status")).toHaveTextContent("显示前 200 项，共 250 项")
+  })
+
+  it("resets dataset-specific field selections after opening another dataset", async () => {
+    const nextDataset: Dataset = {
+      fileName: "rice.kml",
+      totalRecords: 1,
+      fields: [
+        { name: "crop", source: "original" },
+        { name: "admin_country", source: "derived" },
+      ],
+      records: [{ id: 1, geometry: null, properties: { crop: "水稻" }, derived: {} }],
+      warnings: [],
+    }
+    openMock.mockResolvedValueOnce("tea.kml").mockResolvedValueOnce("rice.kml")
+    invokeMock.mockResolvedValueOnce(teaDataset).mockResolvedValueOnce(nextDataset)
+
+    render(<App />)
+    const openButton = screen.getByRole("button", { name: "打开文件" })
+    await userEvent.click(openButton)
+    await screen.findByText("tea.kml")
+    await userEvent.selectOptions(screen.getByRole("combobox"), "name")
+    await userEvent.click(screen.getByRole("button", { name: "name原始" }))
+    expect(screen.getAllByText("茶树").length).toBeGreaterThan(0)
+
+    await userEvent.click(openButton)
+    await screen.findByText("rice.kml")
+
+    expect(screen.getByRole("combobox")).toHaveValue("admin_country")
+    expect(document.querySelector(".field-row.active")).toBeNull()
   })
 
   it("keeps the existing dataset when open_dataset rejects", async () => {

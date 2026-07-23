@@ -27,10 +27,13 @@ select {
 }
 
 .app-shell {
-  min-height: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .toolbar {
+  flex: 0 0 56px;
   height: 56px;
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -93,8 +96,28 @@ select {
   background: #fff0f0;
 }
 
+.warning-banner {
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border: 1px solid #c78b2b;
+  border-radius: 6px;
+  color: #694710;
+  background: #fff8e8;
+  font-size: 13px;
+}
+
+.warning-banner ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.warning-banner li + li {
+  margin-top: 3px;
+}
+
 .workbench-grid {
-  height: calc(100vh - 56px);
+  min-height: 0;
+  flex: 1;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 300px;
   overflow: hidden;
@@ -188,6 +211,10 @@ select {
 .field-row small,
 .value-row small,
 .stats-row small {
+  color: #60707a;
+}
+
+.list-limit {
   color: #60707a;
 }
 

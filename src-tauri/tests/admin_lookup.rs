@@ -1,4 +1,4 @@
-use geotable_lib::admin::{enrich_dataset, AdminIndex};
+use geotable_lib::admin::{enrich_dataset, production_admin_index, AdminIndex};
 use geotable_lib::model::{
     Dataset, DerivedFields, FeatureRecord, FieldDefinition, FieldSource, FieldValue, Geometry,
     ImportWarning, WarningCode,
@@ -140,6 +140,52 @@ fn enriches_points_with_country_and_level1() {
         Some("印度")
     );
     assert_eq!(enriched.records[1].derived.admin_level1, None);
+}
+
+#[test]
+fn production_boundaries_cover_china_and_india_admin1() {
+    let index = production_admin_index().expect("production index");
+    let dataset = dataset_with_points(&[(116.4074, 39.9042), (77.2090, 28.6139)], vec![]);
+
+    let enriched = enrich_dataset(dataset, index);
+
+    assert_eq!(
+        enriched.records[0].derived.admin_country.as_deref(),
+        Some("中华人民共和国")
+    );
+    assert_eq!(
+        enriched.records[0].derived.admin_level1.as_deref(),
+        Some("北京市")
+    );
+    assert_eq!(
+        enriched.records[1].derived.admin_country.as_deref(),
+        Some("印度")
+    );
+    assert_eq!(
+        enriched.records[1].derived.admin_level1.as_deref(),
+        Some("德里")
+    );
+}
+
+#[test]
+fn production_boundary_index_is_reused() {
+    let first = production_admin_index().expect("first index");
+    let second = production_admin_index().expect("second index");
+
+    assert!(std::ptr::eq(first, second));
+}
+
+#[test]
+fn warns_when_admin1_is_outside_packaged_coverage() {
+    let index = production_admin_index().expect("production index");
+    let enriched = enrich_dataset(dataset_with_points(&[(-122.4194, 37.7749)], vec![]), index);
+
+    assert!(enriched.records[0].derived.admin_country.is_some());
+    assert_eq!(enriched.records[0].derived.admin_level1, None);
+    assert!(enriched
+        .warnings
+        .iter()
+        .any(|warning| warning.message.contains("仅覆盖中国和印度")));
 }
 
 #[test]

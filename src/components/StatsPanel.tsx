@@ -2,6 +2,8 @@ import { useMemo, useState } from "react"
 import { buildStats } from "../lib/filtering"
 import type { FeatureRecord, FieldDefinition } from "../types/geo"
 
+export const MAX_VISIBLE_STATS = 200
+
 type StatsPanelProps = {
   fields: FieldDefinition[]
   records: FeatureRecord[]
@@ -18,6 +20,7 @@ export function StatsPanel({
   onAddFieldFilter,
 }: StatsPanelProps) {
   const stats = useMemo(() => buildStats(records, selectedField), [records, selectedField])
+  const visibleStats = stats.slice(0, MAX_VISIBLE_STATS)
   const [copyError, setCopyError] = useState(false)
 
   async function copyStats() {
@@ -53,7 +56,7 @@ export function StatsPanel({
         ))}
       </select>
       <div className="stats-list">
-        {stats.map((row) => (
+        {visibleStats.map((row) => (
           <button
             className="stats-row"
             type="button"
@@ -66,6 +69,11 @@ export function StatsPanel({
           </button>
         ))}
       </div>
+      {stats.length > MAX_VISIBLE_STATS && (
+        <small className="list-limit" role="status">
+          显示前 {MAX_VISIBLE_STATS} 项，共 {stats.length.toLocaleString("zh-CN")} 项
+        </small>
+      )}
     </aside>
   )
 }

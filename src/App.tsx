@@ -5,7 +5,7 @@ import { FieldPanel } from "./components/FieldPanel"
 import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
 import { Toolbar } from "./components/Toolbar"
-import { applyFilters } from "./lib/filtering"
+import { applyFieldFilters, applyFilters, sortRecords } from "./lib/filtering"
 import type { Dataset, FilterState, ImportStatus } from "./types/geo"
 import "./styles.css"
 
@@ -22,6 +22,25 @@ function withoutFieldFilter(filter: FilterState, field: string): FilterState {
   return { ...filter, fieldFilters }
 }
 
+function warningSummary(warnings: Dataset["warnings"]): Array<{
+  key: string
+  message: string
+  count: number
+  recordIds: number[]
+}> {
+  const groups = new Map<string, { message: string; count: number; recordIds: number[] }>()
+  for (const warning of warnings) {
+    const key = `${warning.code}\0${warning.message}`
+    const group = groups.get(key) ?? { message: warning.message, count: 0, recordIds: [] }
+    group.count += 1
+    if (warning.recordId !== undefined && group.recordIds.length < 5) {
+      group.recordIds.push(warning.recordId)
+    }
+    groups.set(key, group)
+  }
+  return Array.from(groups, ([key, group]) => ({ key, ...group }))
+}
+
 export default function App() {
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const [filter, setFilter] = useState<FilterState>(initialFilter)
@@ -30,14 +49,26 @@ export default function App() {
   const [statsField, setStatsField] = useState("admin_country")
   const isOpeningRef = useRef(false)
 
-  const filteredRecords = useMemo(
-    () => (dataset ? applyFilters(dataset.records, filter) : []),
-    [dataset, filter],
+  const baseRecords = useMemo(
+    () => dataset
+      ? applyFilters(dataset.records, {
+          ...initialFilter,
+          searchText: filter.searchText,
+          searchMode: filter.searchMode,
+          searchFields: filter.searchFields,
+        })
+      : [],
+    [dataset, filter.searchFields, filter.searchMode, filter.searchText],
   )
+  const filteredRecords = useMemo(() => {
+    const records = applyFieldFilters(baseRecords, filter.fieldFilters)
+    return filter.sort ? sortRecords(records, filter.sort.field, filter.sort.direction) : records
+  }, [baseRecords, filter.fieldFilters, filter.sort])
   const statsRecords = useMemo(
-    () => (dataset ? applyFilters(dataset.records, withoutFieldFilter(filter, statsField)) : []),
-    [dataset, filter, statsField],
+    () => applyFieldFilters(baseRecords, withoutFieldFilter(filter, statsField).fieldFilters),
+    [baseRecords, filter, statsField],
   )
+  const warningGroups = useMemo(() => warningSummary(dataset?.warnings ?? []), [dataset])
 
   async function handleOpen() {
     if (isOpeningRef.current) return
@@ -58,6 +89,11 @@ export default function App() {
       const result = await invoke<Dataset>("open_dataset", { path: selected })
       setDataset(result)
       setFilter(initialFilter)
+      setStatsField(
+        result.fields.some((field) => field.name === "admin_country")
+          ? "admin_country"
+          : (result.fields[0]?.name ?? ""),
+      )
       setStatus(result.warnings.length > 0 ? "partial_failure" : "ready")
     } catch (caught) {
       setStatus("failed")
@@ -110,9 +146,24 @@ export default function App() {
         onExport={handleExport}
       />
       {error && <div className="error-banner">{error}</div>}
+      {warningGroups.length > 0 && (
+        <section className="warning-banner" aria-label="导入警告">
+          <strong>导入完成，共 {dataset?.warnings.length ?? 0} 条警告</strong>
+          <ul>
+            {warningGroups.map((group) => (
+              <li key={group.key}>
+                {group.message}
+                {group.recordIds.length > 0 && `（记录 ${group.recordIds.join("、")}）`}
+                {group.count > 1 && `，共 ${group.count} 条`}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="workbench-grid">
         <FieldPanel
           dataset={dataset}
+          candidateRecords={baseRecords}
           filter={filter}
           onFilterChange={setFilter}
         />

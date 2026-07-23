@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { FeatureRecord, FilterState } from "../types/geo"
-import { applyFilters, buildStats, getUniqueValues, sortRecords } from "./filtering"
+import { applyFieldFilters, applyFilters, buildStats, getUniqueValues, sortRecords } from "./filtering"
 
 const records: FeatureRecord[] = [
   {
@@ -59,6 +59,13 @@ describe("filtering", () => {
       searchText: "茶",
       fieldFilters: { admin_country: ["中国"] },
     })
+    expect(filtered.map((record) => record.id)).toEqual([1, 2])
+  })
+
+  it("applies field filters to a prefiltered candidate set", () => {
+    const candidates = applyFilters(records, { ...emptyFilter, searchText: "茶" })
+    const filtered = applyFieldFilters(candidates, { admin_country: ["中国"] })
+
     expect(filtered.map((record) => record.id)).toEqual([1, 2])
   })
 

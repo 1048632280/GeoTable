@@ -1,6 +1,7 @@
 use super::boundary::{AdminIndex, AdminPolygon};
-use crate::model::{Dataset, Geometry, WarningCode};
+use crate::model::{Dataset, Geometry, ImportWarning, WarningCode};
 use geo::{Contains, Point};
+use rstar::{RTree, AABB};
 
 pub fn enrich_dataset(mut dataset: Dataset, index: &AdminIndex) -> Dataset {
     if dataset
@@ -11,6 +12,7 @@ pub fn enrich_dataset(mut dataset: Dataset, index: &AdminIndex) -> Dataset {
         return dataset;
     }
 
+    let mut has_uncovered_level1 = false;
     for record in &mut dataset.records {
         let Some(Geometry::Point { lon, lat }) = record.geometry else {
             continue;
@@ -24,20 +26,31 @@ pub fn enrich_dataset(mut dataset: Dataset, index: &AdminIndex) -> Dataset {
             find_polygon(&index.countries, &point).map(|item| item.name.clone());
         record.derived.admin_level1 =
             find_polygon(&index.level1, &point).map(|item| item.name.clone());
+        if let Some(country) = record.derived.admin_country.as_deref() {
+            has_uncovered_level1 |= !index.has_level1_coverage(country);
+        }
+    }
+
+    if has_uncovered_level1 {
+        dataset.warnings.push(ImportWarning {
+            code: WarningCode::AdminLookupFailed,
+            message: "内置一级行政区边界仅覆盖中国和印度；其他国家的 admin_level1 保持为空。"
+                .to_string(),
+            record_id: None,
+        });
     }
 
     dataset
 }
 
-fn find_polygon<'a>(polygons: &'a [AdminPolygon], point: &Point<f64>) -> Option<&'a AdminPolygon> {
+fn find_polygon<'a>(
+    polygons: &'a RTree<AdminPolygon>,
+    point: &Point<f64>,
+) -> Option<&'a AdminPolygon> {
+    let envelope = AABB::from_point([point.x(), point.y()]);
     polygons
-        .iter()
-        .filter(|polygon| bbox_contains(polygon.bbox, point.x(), point.y()))
+        .locate_in_envelope_intersecting(envelope)
         .find(|polygon| polygon.polygon.contains(point))
-}
-
-fn bbox_contains(bbox: [f64; 4], lon: f64, lat: f64) -> bool {
-    lon >= bbox[0] && lat >= bbox[1] && lon <= bbox[2] && lat <= bbox[3]
 }
 
 fn is_wgs84_like(lon: f64, lat: f64) -> bool {

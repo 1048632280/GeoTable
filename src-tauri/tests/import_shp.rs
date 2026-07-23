@@ -2,7 +2,8 @@ use geotable_lib::import::import_file;
 use geotable_lib::model::{FieldDefinition, FieldSource, FieldValue, Geometry, WarningCode};
 use shapefile::dbase::{self, TableWriterBuilder};
 use shapefile::{Point, PointZ, Writer};
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
 #[test]
@@ -36,6 +37,49 @@ fn imports_wgs84_point_with_dbf_field() {
     assert_eq!(
         dataset.records[0].properties.get("name"),
         Some(&FieldValue::String("Beijing".to_string()))
+    );
+}
+
+#[test]
+fn uses_cpg_encoding_for_dbf_schema_and_values() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let shp_path = dir.path().join("gbk.shp");
+    let builder = TableWriterBuilder::with_encoding(dbase::encoding::EncodingRs::from(
+        dbase::encoding_rs::GBK,
+    ))
+    .add_character_field("ABCD".try_into().expect("field name"), 20);
+    let mut writer = Writer::from_path(&shp_path, builder).expect("create GBK SHP writer");
+    let mut record = dbase::Record::default();
+    record.insert(
+        "ABCD".to_string(),
+        dbase::FieldValue::Character(Some("北京".to_string())),
+    );
+    writer
+        .write_shape_and_record(&Point::new(116.397, 39.908), &record)
+        .expect("write GBK record");
+    drop(writer);
+    let mut dbf = OpenOptions::new()
+        .write(true)
+        .open(shp_path.with_extension("dbf"))
+        .expect("open dbf header");
+    dbf.seek(SeekFrom::Start(32))
+        .expect("seek field descriptor");
+    let (field_name, _, had_errors) = dbase::encoding_rs::GBK.encode("名称");
+    assert!(!had_errors);
+    let mut descriptor_name = [0_u8; 11];
+    descriptor_name[..field_name.len()].copy_from_slice(&field_name);
+    dbf.write_all(&descriptor_name)
+        .expect("write GBK field name");
+    drop(dbf);
+    fs::write(shp_path.with_extension("cpg"), "GBK").expect("write cpg");
+    write_wgs84_prj(&shp_path);
+
+    let dataset = import_file(&shp_path).expect("imports GBK SHP");
+
+    assert!(dataset.fields.iter().any(|field| field.name == "名称"));
+    assert_eq!(
+        dataset.records[0].field_as_string("名称").as_deref(),
+        Some("北京")
     );
 }
 

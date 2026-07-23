@@ -5,7 +5,7 @@ pub mod import;
 pub mod model;
 
 mod commands {
-    use super::admin::{enrich_dataset, AdminIndex};
+    use super::admin::{enrich_dataset, production_admin_index};
     use super::error::GeoTableError;
     use super::export;
     use super::import;
@@ -15,9 +15,7 @@ mod commands {
     #[tauri::command]
     pub fn open_dataset(path: String) -> Result<Dataset, GeoTableError> {
         let dataset = import::import_file(&PathBuf::from(path))?;
-        let admin0 = include_str!("../assets/admin/admin0.sample.geojson");
-        let admin1 = include_str!("../assets/admin/admin1.sample.geojson");
-        let index = AdminIndex::from_geojson_str(admin0, admin1)?;
+        let index = production_admin_index()?;
         Ok(enrich_dataset(dataset, &index))
     }
 

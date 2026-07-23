@@ -1,20 +1,19 @@
 use crate::error::GeoTableError;
 use crate::model::{
-    Dataset, DerivedFields, FeatureRecord, FieldDefinition, FieldSource, FieldValue, Geometry,
-    ImportWarning, WarningCode,
+    unique_source_field_name, Dataset, DerivedFields, FeatureRecord, FieldDefinition, FieldSource,
+    FieldValue, Geometry, ImportWarning, WarningCode,
 };
-use shapefile::{dbase, Reader, Shape};
+use shapefile::{dbase, Reader, Shape, ShapeReader};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
     ensure_sidecar(path, "dbf")?;
     ensure_sidecar(path, "shx")?;
 
-    let mut reader =
-        Reader::from_path(path).map_err(|error| GeoTableError::FileRead(error.to_string()))?;
-    let field_names = read_dbf_field_names(path)?;
+    let (mut reader, field_mapping) = open_shapefile_reader(path)?;
     let mut records = Vec::new();
     let mut warnings = Vec::new();
 
@@ -45,7 +44,7 @@ pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
             }
         };
 
-        let properties = convert_dbf_record(&dbf_record);
+        let properties = convert_dbf_record(&dbf_record, &field_mapping);
         records.push(FeatureRecord {
             id,
             geometry,
@@ -54,10 +53,10 @@ pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
         });
     }
 
-    let mut fields: Vec<FieldDefinition> = field_names
-        .into_iter()
+    let mut fields: Vec<FieldDefinition> = field_mapping
+        .values()
         .map(|name| FieldDefinition {
-            name,
+            name: name.clone(),
             source: FieldSource::Original,
         })
         .collect();
@@ -115,21 +114,54 @@ fn ensure_sidecar(path: &Path, extension: &str) -> Result<(), GeoTableError> {
     }
 }
 
-fn read_dbf_field_names(path: &Path) -> Result<BTreeSet<String>, GeoTableError> {
-    let reader = dbase::Reader::from_path(path.with_extension("dbf"))
-        .map_err(|error| GeoTableError::FileRead(error.to_string()))?;
+type ShapefileReader = Reader<BufReader<File>, BufReader<File>>;
 
-    Ok(reader
-        .fields()
-        .iter()
-        .map(|field| field.name().to_string())
-        .collect())
+fn open_shapefile_reader(
+    path: &Path,
+) -> Result<(ShapefileReader, BTreeMap<String, String>), GeoTableError> {
+    let shape_reader =
+        ShapeReader::from_path(path).map_err(|error| GeoTableError::FileRead(error.to_string()))?;
+    let dbf_source = File::open(path.with_extension("dbf"))
+        .map(BufReader::new)
+        .map_err(|error| GeoTableError::FileRead(error.to_string()))?;
+    let dbf_reader = match read_cpg_encoding(path) {
+        Some(encoding) => dbase::ReaderBuilder::new()
+            .with_encoding(encoding)
+            .build(dbf_source),
+        None => dbase::Reader::new(dbf_source),
+    }
+    .map_err(|error| GeoTableError::FileRead(error.to_string()))?;
+
+    let mut used_names = BTreeSet::new();
+    let mut field_mapping = BTreeMap::new();
+    for field in dbf_reader.fields() {
+        let source_name = field.name().to_string();
+        let output_name = unique_source_field_name(&source_name, &used_names);
+        used_names.insert(output_name.clone());
+        field_mapping.insert(source_name, output_name);
+    }
+    Ok((Reader::new(shape_reader, dbf_reader), field_mapping))
 }
 
-fn convert_dbf_record(record: &dbase::Record) -> BTreeMap<String, FieldValue> {
+fn read_cpg_encoding(path: &Path) -> Option<dbase::encoding::DynEncoding> {
+    let mut label = String::new();
+    File::open(path.with_extension("cpg"))
+        .ok()?
+        .take(1026)
+        .read_to_string(&mut label)
+        .ok()?;
+    (label.len() <= 1025).then_some(())?;
+    dbase::encoding::DynEncoding::from_name(label.trim().trim_start_matches('\u{feff}'))
+}
+
+fn convert_dbf_record(
+    record: &dbase::Record,
+    field_mapping: &BTreeMap<String, String>,
+) -> BTreeMap<String, FieldValue> {
     let mut properties = BTreeMap::new();
     for (name, value) in record.as_ref() {
-        properties.insert(name.to_string(), convert_dbf_value(value));
+        let output_name = field_mapping.get(name).unwrap_or(name);
+        properties.insert(output_name.to_string(), convert_dbf_value(value));
     }
     properties
 }
@@ -141,10 +173,77 @@ fn convert_dbf_value(value: &dbase::FieldValue) -> FieldValue {
         dbase::FieldValue::Float(Some(value)) => FieldValue::Number((*value).into()),
         dbase::FieldValue::Logical(Some(value)) => FieldValue::Bool(*value),
         dbase::FieldValue::Date(Some(value)) => FieldValue::String(value.to_string()),
-        _ => FieldValue::Null,
+        dbase::FieldValue::Integer(value) => FieldValue::Number((*value).into()),
+        dbase::FieldValue::Currency(value) | dbase::FieldValue::Double(value) => {
+            FieldValue::Number(*value)
+        }
+        dbase::FieldValue::DateTime(value) => FieldValue::String(format!(
+            "{} {:02}:{:02}:{:02}",
+            value.date(),
+            value.time().hours(),
+            value.time().minutes(),
+            value.time().seconds()
+        )),
+        dbase::FieldValue::Memo(value) => FieldValue::String(value.clone()),
+        dbase::FieldValue::Character(None)
+        | dbase::FieldValue::Numeric(None)
+        | dbase::FieldValue::Float(None)
+        | dbase::FieldValue::Logical(None)
+        | dbase::FieldValue::Date(None) => FieldValue::Null,
     }
 }
 
 fn display_path(path: PathBuf) -> String {
     path.to_string_lossy().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dbase::{Date, DateTime, Time};
+
+    #[test]
+    fn converts_all_supported_dbf_value_variants() {
+        let date = Date::new(24, 7, 2026).expect("date");
+        let datetime = DateTime::new(date, Time::new(13, 5, 9).expect("time"));
+        let cases = [
+            (
+                dbase::FieldValue::Character(Some(" 文本 ".to_string())),
+                FieldValue::String("文本".to_string()),
+            ),
+            (
+                dbase::FieldValue::Numeric(Some(7.5)),
+                FieldValue::Number(7.5),
+            ),
+            (dbase::FieldValue::Float(Some(2.5)), FieldValue::Number(2.5)),
+            (
+                dbase::FieldValue::Logical(Some(true)),
+                FieldValue::Bool(true),
+            ),
+            (
+                dbase::FieldValue::Date(Some(date)),
+                FieldValue::String("20260724".to_string()),
+            ),
+            (dbase::FieldValue::Integer(42), FieldValue::Number(42.0)),
+            (dbase::FieldValue::Currency(12.5), FieldValue::Number(12.5)),
+            (dbase::FieldValue::Double(3.25), FieldValue::Number(3.25)),
+            (
+                dbase::FieldValue::DateTime(datetime),
+                FieldValue::String("20260724 13:05:09".to_string()),
+            ),
+            (
+                dbase::FieldValue::Memo("长文本".to_string()),
+                FieldValue::String("长文本".to_string()),
+            ),
+            (dbase::FieldValue::Character(None), FieldValue::Null),
+            (dbase::FieldValue::Numeric(None), FieldValue::Null),
+            (dbase::FieldValue::Float(None), FieldValue::Null),
+            (dbase::FieldValue::Logical(None), FieldValue::Null),
+            (dbase::FieldValue::Date(None), FieldValue::Null),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(convert_dbf_value(&input), expected);
+        }
+    }
 }

@@ -1,6 +1,8 @@
 use crate::error::GeoTableError;
 use geo::{Coord, LineString, Polygon};
 use geojson::{GeoJson, GeometryValue, Position};
+use rstar::{RTree, RTreeObject, AABB};
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct AdminPolygon {
@@ -10,18 +12,38 @@ pub struct AdminPolygon {
     pub polygon: Polygon<f64>,
 }
 
+impl RTreeObject for AdminPolygon {
+    type Envelope = AABB<[f64; 2]>;
+
+    fn envelope(&self) -> Self::Envelope {
+        AABB::from_corners([self.bbox[0], self.bbox[1]], [self.bbox[2], self.bbox[3]])
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AdminIndex {
-    pub countries: Vec<AdminPolygon>,
-    pub level1: Vec<AdminPolygon>,
+    pub countries: RTree<AdminPolygon>,
+    pub level1: RTree<AdminPolygon>,
+    level1_countries: BTreeSet<String>,
 }
 
 impl AdminIndex {
     pub fn from_geojson_str(admin0: &str, admin1: &str) -> Result<Self, GeoTableError> {
+        let countries = parse_polygons(admin0, "name", None)?;
+        let level1 = parse_polygons(admin1, "name", Some("country"))?;
+        let level1_countries = level1
+            .iter()
+            .filter_map(|polygon| polygon.country.clone())
+            .collect();
         Ok(Self {
-            countries: parse_polygons(admin0, "name", None)?,
-            level1: parse_polygons(admin1, "name", Some("country"))?,
+            countries: RTree::bulk_load(countries),
+            level1: RTree::bulk_load(level1),
+            level1_countries,
         })
+    }
+
+    pub fn has_level1_coverage(&self, country: &str) -> bool {
+        self.level1_countries.contains(country)
     }
 }
 

@@ -1,6 +1,30 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub const DERIVED_FIELD_NAMES: [&str; 2] = ["admin_country", "admin_level1"];
+
+pub fn unique_source_field_name(
+    source_name: &str,
+    used_names: &std::collections::BTreeSet<String>,
+) -> String {
+    let base = if DERIVED_FIELD_NAMES.contains(&source_name) {
+        format!("source_{source_name}")
+    } else {
+        source_name.to_string()
+    };
+    if !used_names.contains(&base) && !DERIVED_FIELD_NAMES.contains(&base.as_str()) {
+        return base;
+    }
+
+    for suffix in 2.. {
+        let candidate = format!("{base}_{suffix}");
+        if !used_names.contains(&candidate) {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum FieldValue {
@@ -104,7 +128,10 @@ mod tests {
     fn serializes_dataset_with_derived_admin_fields() {
         let record = FeatureRecord {
             id: 1,
-            geometry: Some(Geometry::Point { lon: 102.7, lat: 25.0 }),
+            geometry: Some(Geometry::Point {
+                lon: 102.7,
+                lat: 25.0,
+            }),
             properties: BTreeMap::from([(
                 "name".to_string(),
                 FieldValue::String("茶树".to_string()),

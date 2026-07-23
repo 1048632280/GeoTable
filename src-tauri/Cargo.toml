@@ -27,6 +27,9 @@ geojson = "1.0.0"
 rstar = "0.13.0"
 csv = "1.4.0"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"

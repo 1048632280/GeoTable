@@ -1,16 +1,22 @@
-import { useMemo, useState } from "react"
-import { applyFilters, getUniqueValues } from "../lib/filtering"
+import { useEffect, useMemo, useState } from "react"
+import { applyFieldFilters, getUniqueValues } from "../lib/filtering"
+import type { FeatureRecord } from "../types/geo"
 import type { Dataset, FilterState } from "../types/geo"
 
 type FieldPanelProps = {
   dataset: Dataset | null
+  candidateRecords: FeatureRecord[]
   filter: FilterState
   onFilterChange: (next: FilterState) => void
 }
 
-export function FieldPanel({ dataset, filter, onFilterChange }: FieldPanelProps) {
+export function FieldPanel({ dataset, candidateRecords, filter, onFilterChange }: FieldPanelProps) {
   const [fieldSearch, setFieldSearch] = useState("")
   const [selectedField, setSelectedField] = useState<string | null>(null)
+
+  useEffect(() => {
+    setSelectedField(null)
+  }, [dataset])
 
   const fields = useMemo(() => {
     const query = fieldSearch.trim().toLocaleLowerCase()
@@ -22,7 +28,7 @@ export function FieldPanel({ dataset, filter, onFilterChange }: FieldPanelProps)
   const values = useMemo(() => {
     if (!dataset || !selectedField) return []
     const { [selectedField]: _excluded, ...fieldFilters } = filter.fieldFilters
-    const records = applyFilters(dataset.records, { ...filter, fieldFilters })
+    const records = applyFieldFilters(candidateRecords, fieldFilters)
     const countedValues = getUniqueValues(records, selectedField)
     const selectedValues = filter.fieldFilters[selectedField] ?? []
     const values = countedValues.filter(
@@ -33,7 +39,7 @@ export function FieldPanel({ dataset, filter, onFilterChange }: FieldPanelProps)
       if (!countedValueSet.has(value)) values.push({ value, count: 0 })
     }
     return values
-  }, [dataset, filter, selectedField])
+  }, [candidateRecords, dataset, filter.fieldFilters, selectedField])
 
   function toggleValue(value: string) {
     if (!selectedField) return

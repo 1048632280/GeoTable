@@ -48,6 +48,89 @@ fn imports_kml_points_with_extended_data() {
 }
 
 #[test]
+fn imports_schema_data_simple_data_from_kml() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("schema-data.kml");
+    fs::write(
+        &path,
+        r##"<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Schema id="sample"><SimpleField name="species" type="string"/></Schema><Placemark><ExtendedData><SchemaData schemaUrl="#sample"><SimpleData name="species">茶树</SimpleData></SchemaData></ExtendedData><Point><coordinates>102.7,25.0</coordinates></Point></Placemark></Document></kml>"##,
+    )
+    .expect("write kml");
+
+    let dataset = import_file(&path).expect("imports schema data");
+
+    assert_eq!(
+        dataset.records[0].field_as_string("species").as_deref(),
+        Some("茶树")
+    );
+}
+
+#[test]
+fn imports_schema_data_simple_data_from_kmz() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("schema-data.kmz");
+    write_kmz(
+        &path,
+        &[(
+            "doc.kml",
+            r##"<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><ExtendedData><SchemaData schemaUrl="#sample"><SimpleData name="species">水稻</SimpleData></SchemaData></ExtendedData><Point><coordinates>102.7,25.0</coordinates></Point></Placemark></kml>"##,
+        )],
+    );
+
+    let dataset = import_file(&path).expect("imports kmz schema data");
+
+    assert_eq!(
+        dataset.records[0].field_as_string("species").as_deref(),
+        Some("水稻")
+    );
+}
+
+#[test]
+fn renames_source_admin_fields_without_duplicate_headers() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("reserved-fields.kml");
+    fs::write(
+        &path,
+        r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><ExtendedData><Data name="admin_country"><value>源国家</value></Data><SchemaData><SimpleData name="admin_level1">源省份</SimpleData></SchemaData></ExtendedData><Point><coordinates>102.7,25.0</coordinates></Point></Placemark></kml>"#,
+    )
+    .expect("write kml");
+
+    let dataset = import_file(&path).expect("imports reserved fields");
+    let field_names: Vec<&str> = dataset
+        .fields
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect();
+
+    assert_eq!(
+        dataset.records[0]
+            .field_as_string("source_admin_country")
+            .as_deref(),
+        Some("源国家")
+    );
+    assert_eq!(
+        dataset.records[0]
+            .field_as_string("source_admin_level1")
+            .as_deref(),
+        Some("源省份")
+    );
+    assert_eq!(
+        field_names
+            .iter()
+            .filter(|name| **name == "admin_country")
+            .count(),
+        1
+    );
+    assert_eq!(
+        field_names
+            .iter()
+            .filter(|name| **name == "admin_level1")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn rejects_kml_without_points() {
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("empty.kml");

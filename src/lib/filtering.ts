@@ -18,11 +18,7 @@ export function applyFilters(records: FeatureRecord[], filter: FilterState): Fea
       return false
     }
 
-    return Object.entries(filter.fieldFilters).every(([field, allowedValues]) => {
-      if (allowedValues.length === 0) return true
-      const value = getRecordValue(record, field)
-      return value !== null && allowedValues.includes(value)
-    })
+    return recordMatchesFieldFilters(record, filter.fieldFilters)
   })
 
   if (filter.sort) {
@@ -30,6 +26,13 @@ export function applyFilters(records: FeatureRecord[], filter: FilterState): Fea
   }
 
   return result
+}
+
+export function applyFieldFilters(
+  records: FeatureRecord[],
+  fieldFilters: FilterState["fieldFilters"],
+): FeatureRecord[] {
+  return records.filter((record) => recordMatchesFieldFilters(record, fieldFilters))
 }
 
 export function getUniqueValues(
@@ -106,6 +109,17 @@ function countValues(records: FeatureRecord[], field: string): Map<string, numbe
     counts.set(value, (counts.get(value) ?? 0) + 1)
   }
   return counts
+}
+
+function recordMatchesFieldFilters(
+  record: FeatureRecord,
+  fieldFilters: FilterState["fieldFilters"],
+): boolean {
+  return Object.entries(fieldFilters).every(([field, allowedValues]) => {
+    if (allowedValues.length === 0) return true
+    const value = getRecordValue(record, field)
+    return value !== null && allowedValues.includes(value)
+  })
 }
 
 function normalizeFieldValue(value: FieldValue | undefined): string | null {
