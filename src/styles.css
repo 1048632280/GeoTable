@@ -207,3 +207,75 @@ select {
   padding: 12px;
   overflow: hidden;
 }
+
+.data-table-shell {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #d8dee3;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.data-table-header {
+  display: grid;
+  overflow: hidden;
+  border-bottom: 1px solid #d8dee3;
+  background: #eef3f5;
+}
+
+.column-header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid #d8dee3;
+  background: transparent;
+  color: #172026;
+  cursor: pointer;
+}
+
+.column-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.data-table-spacer {
+  position: relative;
+  min-width: max-content;
+}
+
+.data-table-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34px;
+  display: grid;
+  border-bottom: 1px solid #edf0f2;
+}
+
+.data-table-row:nth-child(even) {
+  background: #fafbfc;
+}
+
+.data-table-cell {
+  min-width: 0;
+  display: block;
+  padding: 7px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid #edf0f2;
+}

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { useMemo, useRef, useState } from "react"
 import { FieldPanel } from "./components/FieldPanel"
+import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
 import { Toolbar } from "./components/Toolbar"
 import { applyFilters } from "./lib/filtering"
@@ -122,7 +123,12 @@ export default function App() {
             onChange={(event) => setFilter({ ...filter, searchText: event.target.value })}
             placeholder="全局搜索，例如：茶"
           />
-          <p>表格将在下一任务接入。</p>
+          <DataTable
+            fields={dataset?.fields ?? []}
+            records={filteredRecords}
+            sort={filter.sort}
+            onSortChange={(sort) => setFilter({ ...filter, sort })}
+          />
         </div>
         <StatsPanel
           fields={dataset?.fields ?? []}

@@ -72,7 +72,7 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "字段" })).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "统计" })).toBeInTheDocument()
     expect(screen.getByPlaceholderText("全局搜索，例如：茶")).toBeInTheDocument()
-    expect(screen.getByText("表格将在下一任务接入。")).toBeInTheDocument()
+    expect(document.querySelector(".data-table-shell")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "打开文件" })).toBeEnabled()
     expect(screen.getByText("未选择文件")).toBeInTheDocument()
     expect(screen.getByText("总样本 0")).toBeInTheDocument()
