@@ -1,6 +1,9 @@
 use geotable_lib::import::import_file;
 use pretty_assertions::assert_eq;
 use std::fs;
+use std::io::Write;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipWriter};
 
 #[test]
 fn imports_kml_points_with_extended_data() {
@@ -57,4 +60,139 @@ fn rejects_kml_without_points() {
 
     let error = import_file(&path).expect_err("empty kml fails");
     assert!(error.user_message().contains("KML/KMZ 内没有可用点要素"));
+}
+
+#[test]
+fn imports_kmz_root_doc_with_attributes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("tea.kmz");
+    write_kmz(
+        &path,
+        &[
+            (
+                "alternate.kml",
+                r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>不应导入</name><Point><coordinates>0,0</coordinates></Point></Placemark></kml>"#,
+            ),
+            (
+                "doc.kml",
+                r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>茶树</name><ExtendedData><Data name="crop"><value>茶</value></Data></ExtendedData><Point><coordinates>102.7,25.0</coordinates></Point></Placemark></Document></kml>"#,
+            ),
+        ],
+    );
+
+    let dataset = import_file(&path).expect("imports kmz root doc");
+
+    assert_eq!(dataset.file_name, "tea.kmz");
+    assert_eq!(dataset.total_records, 1);
+    assert_eq!(
+        dataset.records[0].field_as_string("name").as_deref(),
+        Some("茶树")
+    );
+    assert_eq!(
+        dataset.records[0].field_as_string("crop").as_deref(),
+        Some("茶")
+    );
+}
+
+#[test]
+fn imports_first_kml_entry_when_kmz_has_no_root_doc() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("fallback.kmz");
+    write_kmz(
+        &path,
+        &[(
+            "nested/feature.kml",
+            r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>回退点</name><Point><coordinates>102.7,25.0</coordinates></Point></Placemark></kml>"#,
+        )],
+    );
+
+    let dataset = import_file(&path).expect("imports fallback kml entry");
+
+    assert_eq!(dataset.total_records, 1);
+    assert_eq!(
+        dataset.records[0].field_as_string("name").as_deref(),
+        Some("回退点")
+    );
+}
+
+#[test]
+fn rejects_kmz_without_kml_entry() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("missing-kml.kmz");
+    write_kmz(&path, &[("notes.txt", "没有 KML 文档")]);
+
+    let error = import_file(&path).expect_err("kmz without kml fails");
+
+    assert!(error.user_message().contains("KMZ 内未找到 KML 文档"));
+}
+
+#[test]
+fn rejects_kmz_without_usable_points() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("empty.kmz");
+    write_kmz(
+        &path,
+        &[(
+            "doc.kml",
+            r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><LineString><coordinates>102.7,25.0 103.0,25.1</coordinates></LineString></Placemark></kml>"#,
+        )],
+    );
+
+    let error = import_file(&path).expect_err("kmz without points fails");
+
+    assert!(error.user_message().contains("KML/KMZ 内没有可用点要素"));
+}
+
+#[test]
+fn skips_out_of_range_kml_points() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("coordinates.kml");
+    fs::write(
+        &path,
+        r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>有效点</name><Point><coordinates>102.7,25.0</coordinates></Point></Placemark><Placemark><name>无效点</name><Point><coordinates>181,91</coordinates></Point></Placemark></Document></kml>"#,
+    )
+    .expect("write kml");
+
+    let dataset = import_file(&path).expect("imports valid point only");
+
+    assert_eq!(dataset.total_records, 1);
+    assert_eq!(
+        dataset.records[0].field_as_string("name").as_deref(),
+        Some("有效点")
+    );
+    assert_eq!(dataset.warnings.len(), 1);
+}
+
+#[test]
+fn imports_points_in_nested_folders() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("nested-folders.kml");
+    fs::write(
+        &path,
+        r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Folder><Folder><Placemark><name>嵌套点</name><Point><coordinates>102.7,25.0</coordinates></Point></Placemark></Folder></Folder></Document></kml>"#,
+    )
+    .expect("write kml");
+
+    let dataset = import_file(&path).expect("imports nested folder point");
+
+    assert_eq!(dataset.total_records, 1);
+    assert_eq!(
+        dataset.records[0].field_as_string("name").as_deref(),
+        Some("嵌套点")
+    );
+}
+
+fn write_kmz(path: &std::path::Path, entries: &[(&str, &str)]) {
+    let file = fs::File::create(path).expect("create kmz");
+    let mut writer = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+
+    for (name, contents) in entries {
+        writer.start_file(name, options).expect("start kmz entry");
+        writer
+            .write_all(contents.as_bytes())
+            .expect("write kmz entry");
+    }
+
+    writer.finish().expect("finish kmz");
 }
