@@ -5,6 +5,7 @@ use crate::model::{
 };
 use shapefile::{dbase, Reader, Shape};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
@@ -17,15 +18,23 @@ pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
     let mut records = Vec::new();
     let mut warnings = Vec::new();
 
+    if !has_wgs84_geographic_prj(path) {
+        warnings.push(ImportWarning {
+            code: WarningCode::NonWgs84,
+            message: "SHP 缺少 .prj 文件或其坐标系不像 WGS84 经纬度坐标；行政区识别可能被跳过或结果无效。"
+                .to_string(),
+            record_id: None,
+        });
+    }
+
     for result in reader.iter_shapes_and_records() {
         let (shape, dbf_record) =
             result.map_err(|error| GeoTableError::FileRead(error.to_string()))?;
         let id = records.len() + 1;
         let geometry = match shape {
-            Shape::Point(point) => Some(Geometry::Point {
-                lon: point.x,
-                lat: point.y,
-            }),
+            Shape::Point(point) => point_geometry(point.x, point.y),
+            Shape::PointM(point) => point_geometry(point.x, point.y),
+            Shape::PointZ(point) => point_geometry(point.x, point.y),
             _ => {
                 warnings.push(ImportWarning {
                     code: WarningCode::NonPointGeometry,
@@ -72,6 +81,29 @@ pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
         records,
         warnings,
     })
+}
+
+fn point_geometry(lon: f64, lat: f64) -> Option<Geometry> {
+    Some(Geometry::Point { lon, lat })
+}
+
+fn has_wgs84_geographic_prj(path: &Path) -> bool {
+    let prj_path = path.with_extension("prj");
+    let Ok(contents) = fs::read_to_string(prj_path) else {
+        return false;
+    };
+
+    let prj = contents.trim_start().to_ascii_uppercase();
+    let is_wgs84 = prj.contains("WGS 84")
+        || prj.contains("WGS84")
+        || prj.contains("WGS_1984")
+        || prj.contains("WGS 1984");
+    let is_geographic = matches!(
+        prj.split_once('[').map(|(root, _)| root.trim()),
+        Some("GEOGCS" | "GEOGCRS" | "GEODCRS")
+    );
+
+    is_wgs84 && is_geographic
 }
 
 fn ensure_sidecar(path: &Path, extension: &str) -> Result<(), GeoTableError> {
