@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Toolbar } from "./components/Toolbar"
 import { applyFilters } from "./lib/filtering"
 import type { Dataset, FilterState, ImportStatus } from "./types/geo"
@@ -19,6 +19,8 @@ export default function App() {
   const [filter, setFilter] = useState<FilterState>(initialFilter)
   const [status, setStatus] = useState<ImportStatus>("idle")
   const [error, setError] = useState<string | null>(null)
+  const [isOpening, setIsOpening] = useState(false)
+  const isOpeningRef = useRef(false)
 
   const filteredRecords = useMemo(
     () => (dataset ? applyFilters(dataset.records, filter) : []),
@@ -26,15 +28,18 @@ export default function App() {
   )
 
   async function handleOpen() {
+    if (isOpeningRef.current) return
+    isOpeningRef.current = true
+    setIsOpening(true)
     setError(null)
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "Geo files", extensions: ["shp", "kml", "kmz"] }],
-    })
-    if (typeof selected !== "string") return
-
-    setStatus("loading")
     try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Geo files", extensions: ["shp", "kml", "kmz"] }],
+      })
+      if (typeof selected !== "string") return
+
+      setStatus("loading")
       const result = await invoke<Dataset>("open_dataset", { path: selected })
       setDataset(result)
       setFilter(initialFilter)
@@ -42,18 +47,22 @@ export default function App() {
     } catch (caught) {
       setStatus("failed")
       setError(String(caught))
+    } finally {
+      isOpeningRef.current = false
+      setIsOpening(false)
     }
   }
 
   async function handleExport() {
     if (!dataset || filteredRecords.length === 0) return
-    const target = await save({
-      filters: [{ name: "CSV", extensions: ["csv"] }],
-      defaultPath: `${dataset.fileName}.csv`,
-    })
-    if (typeof target !== "string") return
-
+    setError(null)
     try {
+      const target = await save({
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+        defaultPath: `${dataset.fileName}.csv`,
+      })
+      if (typeof target !== "string") return
+
       await invoke("export_csv", {
         path: target,
         dataset,
@@ -71,6 +80,7 @@ export default function App() {
         totalRecords={dataset?.totalRecords ?? 0}
         filteredRecords={filteredRecords.length}
         status={status}
+        openDisabled={isOpening || status === "loading" || status === "admin_lookup_running"}
         onOpen={handleOpen}
         onExport={handleExport}
       />

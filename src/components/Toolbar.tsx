@@ -6,6 +6,7 @@ type ToolbarProps = {
   totalRecords: number
   filteredRecords: number
   status: ImportStatus
+  openDisabled: boolean
   onOpen: () => void
   onExport: () => void
 }
@@ -24,12 +25,19 @@ export function Toolbar({
   totalRecords,
   filteredRecords,
   status,
+  openDisabled,
   onOpen,
   onExport,
 }: ToolbarProps) {
   return (
     <header className="toolbar">
-      <button className="toolbar-button primary" type="button" onClick={onOpen} title="打开文件">
+      <button
+        className="toolbar-button primary"
+        type="button"
+        onClick={onOpen}
+        disabled={openDisabled}
+        title="打开文件"
+      >
         <FolderOpen size={18} />
         <span>打开文件</span>
       </button>
