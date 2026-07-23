@@ -32,6 +32,26 @@ describe("DataTable", () => {
     expect(screen.getByText("中国")).toBeInTheDocument()
   })
 
+  it("keeps the header and body inside the shared horizontal scroll area", () => {
+    const { container } = render(
+      <DataTable fields={fields} records={records} sort={null} onSortChange={vi.fn()} />,
+    )
+
+    const scrollArea = container.querySelector<HTMLElement>(".data-table-scroll")
+    const inner = scrollArea?.querySelector<HTMLElement>(".data-table-inner") ?? null
+    const body = container.querySelector<HTMLElement>(".data-table-body")
+    const header = inner?.querySelector<HTMLElement>(".data-table-header") ?? null
+    const spacer = body?.querySelector<HTMLElement>(".data-table-spacer") ?? null
+
+    expect(scrollArea).toContainElement(inner)
+    expect(inner).toContainElement(header)
+    expect(inner).toContainElement(body)
+    expect(header).toBeInTheDocument()
+    expect(inner).toHaveStyle({ minWidth: "280px" })
+    expect(header).toHaveStyle({ gridTemplateColumns: "repeat(2, minmax(140px, 1fr))" })
+    expect(spacer).toHaveStyle({ height: "34px" })
+  })
+
   it("cycles a column through ascending, descending, and unsorted", () => {
     const onSortChange = vi.fn()
     const { rerender } = render(
