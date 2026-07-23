@@ -130,6 +130,24 @@ describe("App", () => {
     expect(await screen.findByText("部分失败")).toBeInTheDocument()
   })
 
+  it("keeps the existing dataset when open_dataset rejects", async () => {
+    openMock.mockResolvedValueOnce("tea.kml").mockResolvedValueOnce("broken.kml")
+    invokeMock.mockResolvedValueOnce(teaDataset).mockRejectedValueOnce(new Error("open failed"))
+
+    render(<App />)
+    const openButton = screen.getByRole("button", { name: "打开文件" })
+    await userEvent.click(openButton)
+    expect(await screen.findByText("已就绪")).toBeInTheDocument()
+
+    await userEvent.click(openButton)
+
+    expect(await screen.findByText("Error: open failed")).toBeInTheDocument()
+    expect(screen.getByText("失败")).toBeInTheDocument()
+    expect(screen.getByText("tea.kml")).toBeInTheDocument()
+    expect(screen.getByText("总样本 1")).toBeInTheDocument()
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+  })
+
   it("exports the current filtered record IDs", async () => {
     openMock.mockResolvedValueOnce("tea.kml")
     invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset).mockResolvedValueOnce(undefined)
@@ -178,5 +196,28 @@ describe("App", () => {
 
     expect(await screen.findByText("Error: save failed")).toBeInTheDocument()
     expect(invokeMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the existing dataset when export_csv rejects", async () => {
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(teaDataset).mockRejectedValueOnce(new Error("export failed"))
+    saveMock.mockResolvedValueOnce("tea.csv")
+
+    render(<App />)
+    await userEvent.click(screen.getByRole("button", { name: "打开文件" }))
+    expect(await screen.findByText("已就绪")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "导出 CSV" }))
+
+    expect(await screen.findByText("Error: export failed")).toBeInTheDocument()
+    expect(screen.getByText("已就绪")).toBeInTheDocument()
+    expect(screen.getByText("tea.kml")).toBeInTheDocument()
+    expect(screen.getByText("总样本 1")).toBeInTheDocument()
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "export_csv", {
+      path: "tea.csv",
+      dataset: teaDataset,
+      recordIds: [1],
+    })
   })
 })

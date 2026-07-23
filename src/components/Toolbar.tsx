@@ -6,7 +6,6 @@ type ToolbarProps = {
   totalRecords: number
   filteredRecords: number
   status: ImportStatus
-  openDisabled: boolean
   onOpen: () => void
   onExport: () => void
 }
@@ -25,7 +24,6 @@ export function Toolbar({
   totalRecords,
   filteredRecords,
   status,
-  openDisabled,
   onOpen,
   onExport,
 }: ToolbarProps) {
@@ -35,7 +33,7 @@ export function Toolbar({
         className="toolbar-button primary"
         type="button"
         onClick={onOpen}
-        disabled={openDisabled}
+        disabled={status === "loading" || status === "admin_lookup_running"}
         title="打开文件"
       >
         <FolderOpen size={18} />

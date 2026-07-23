@@ -19,7 +19,6 @@ export default function App() {
   const [filter, setFilter] = useState<FilterState>(initialFilter)
   const [status, setStatus] = useState<ImportStatus>("idle")
   const [error, setError] = useState<string | null>(null)
-  const [isOpening, setIsOpening] = useState(false)
   const isOpeningRef = useRef(false)
 
   const filteredRecords = useMemo(
@@ -30,16 +29,19 @@ export default function App() {
   async function handleOpen() {
     if (isOpeningRef.current) return
     isOpeningRef.current = true
-    setIsOpening(true)
+    const previousStatus = status
+    setStatus("loading")
     setError(null)
     try {
       const selected = await open({
         multiple: false,
         filters: [{ name: "Geo files", extensions: ["shp", "kml", "kmz"] }],
       })
-      if (typeof selected !== "string") return
+      if (typeof selected !== "string") {
+        setStatus(previousStatus)
+        return
+      }
 
-      setStatus("loading")
       const result = await invoke<Dataset>("open_dataset", { path: selected })
       setDataset(result)
       setFilter(initialFilter)
@@ -49,7 +51,6 @@ export default function App() {
       setError(String(caught))
     } finally {
       isOpeningRef.current = false
-      setIsOpening(false)
     }
   }
 
@@ -80,7 +81,6 @@ export default function App() {
         totalRecords={dataset?.totalRecords ?? 0}
         filteredRecords={filteredRecords.length}
         status={status}
-        openDisabled={isOpening || status === "loading" || status === "admin_lookup_running"}
         onOpen={handleOpen}
         onExport={handleExport}
       />
