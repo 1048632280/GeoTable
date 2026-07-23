@@ -3,6 +3,7 @@ use crate::model::Dataset;
 use std::path::Path;
 
 pub mod kml;
+pub mod shp;
 
 pub fn import_file(path: &Path) -> Result<Dataset, GeoTableError> {
     let extension = path
@@ -13,9 +14,7 @@ pub fn import_file(path: &Path) -> Result<Dataset, GeoTableError> {
 
     match extension.as_str() {
         "kml" | "kmz" => kml::import_kml_or_kmz(path),
-        "shp" => Err(GeoTableError::UnsupportedFormat(
-            "SHP 导入将在后续任务实现".to_string(),
-        )),
+        "shp" => shp::import_shp(path),
         other => Err(GeoTableError::UnsupportedFormat(other.to_string())),
     }
 }
