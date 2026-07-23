@@ -14,7 +14,7 @@ pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
 
     let mut reader =
         Reader::from_path(path).map_err(|error| GeoTableError::FileRead(error.to_string()))?;
-    let mut field_names = BTreeSet::new();
+    let field_names = read_dbf_field_names(path)?;
     let mut records = Vec::new();
     let mut warnings = Vec::new();
 
@@ -45,7 +45,7 @@ pub fn import_shp(path: &Path) -> Result<Dataset, GeoTableError> {
             }
         };
 
-        let properties = convert_dbf_record(&dbf_record, &mut field_names);
+        let properties = convert_dbf_record(&dbf_record);
         records.push(FeatureRecord {
             id,
             geometry,
@@ -115,13 +115,20 @@ fn ensure_sidecar(path: &Path, extension: &str) -> Result<(), GeoTableError> {
     }
 }
 
-fn convert_dbf_record(
-    record: &dbase::Record,
-    field_names: &mut BTreeSet<String>,
-) -> BTreeMap<String, FieldValue> {
+fn read_dbf_field_names(path: &Path) -> Result<BTreeSet<String>, GeoTableError> {
+    let reader = dbase::Reader::from_path(path.with_extension("dbf"))
+        .map_err(|error| GeoTableError::FileRead(error.to_string()))?;
+
+    Ok(reader
+        .fields()
+        .iter()
+        .map(|field| field.name().to_string())
+        .collect())
+}
+
+fn convert_dbf_record(record: &dbase::Record) -> BTreeMap<String, FieldValue> {
     let mut properties = BTreeMap::new();
     for (name, value) in record.as_ref() {
-        field_names.insert(name.to_string());
         properties.insert(name.to_string(), convert_dbf_value(value));
     }
     properties

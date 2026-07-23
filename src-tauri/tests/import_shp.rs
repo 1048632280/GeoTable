@@ -1,5 +1,5 @@
 use geotable_lib::import::import_file;
-use geotable_lib::model::{FieldValue, Geometry, WarningCode};
+use geotable_lib::model::{FieldDefinition, FieldSource, FieldValue, Geometry, WarningCode};
 use shapefile::dbase::{self, TableWriterBuilder};
 use shapefile::{Point, PointZ, Writer};
 use std::fs;
@@ -37,6 +37,30 @@ fn imports_wgs84_point_with_dbf_field() {
         dataset.records[0].properties.get("name"),
         Some(&FieldValue::String("Beijing".to_string()))
     );
+}
+
+#[test]
+fn preserves_dbf_fields_for_empty_dataset() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let shp_path = dir.path().join("empty.shp");
+    write_empty_point_shp(&shp_path);
+    write_wgs84_prj(&shp_path);
+
+    let dataset = import_file(&shp_path).expect("empty SHP imports");
+
+    assert_eq!(dataset.total_records, 0);
+    assert!(dataset.fields.contains(&FieldDefinition {
+        name: "name".to_string(),
+        source: FieldSource::Original,
+    }));
+    assert!(dataset.fields.contains(&FieldDefinition {
+        name: "admin_country".to_string(),
+        source: FieldSource::Derived,
+    }));
+    assert!(dataset.fields.contains(&FieldDefinition {
+        name: "admin_level1".to_string(),
+        source: FieldSource::Derived,
+    }));
 }
 
 #[test]
@@ -90,6 +114,10 @@ fn write_point_shp(path: &Path, point: Point, name: &str) {
     writer
         .write_shape_and_record(&point, &dbf_record(name))
         .expect("write point SHP record");
+}
+
+fn write_empty_point_shp(path: &Path) {
+    Writer::from_path(path, dbf_table_builder()).expect("create empty SHP writer");
 }
 
 fn write_point_z_shp(path: &Path, point: PointZ, name: &str) {
