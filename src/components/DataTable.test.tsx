@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { DataTable } from "./DataTable"
 import type { FeatureRecord, FieldDefinition } from "../types/geo"
 
@@ -25,6 +25,10 @@ const records: FeatureRecord[] = [
 ]
 
 describe("DataTable", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it("renders field values", () => {
     render(<DataTable fields={fields} records={records} sort={null} onSortChange={vi.fn()} />)
 
@@ -50,6 +54,27 @@ describe("DataTable", () => {
     expect(inner).toHaveStyle({ minWidth: "280px" })
     expect(header).toHaveStyle({ gridTemplateColumns: "repeat(2, minmax(140px, 1fr))" })
     expect(spacer).toHaveStyle({ height: "34px" })
+  })
+
+  it("reserves header space for the vertical scrollbar", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function getOffsetWidth(
+      this: HTMLElement,
+    ) {
+      return this.classList.contains("data-table-body") ? 320 : 0
+    })
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function getClientWidth(
+      this: HTMLElement,
+    ) {
+      return this.classList.contains("data-table-body") ? 303 : 0
+    })
+
+    const { container } = render(
+      <DataTable fields={fields} records={records} sort={null} onSortChange={vi.fn()} />,
+    )
+
+    const header = container.querySelector<HTMLElement>(".data-table-header")
+
+    await waitFor(() => expect(header).toHaveStyle({ paddingRight: "17px" }))
   })
 
   it("cycles a column through ascending, descending, and unsorted", () => {

@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
-import { useMemo, useRef } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { getRecordValue } from "../lib/filtering"
 import type { FeatureRecord, FieldDefinition, FilterState } from "../types/geo"
 
@@ -13,6 +13,7 @@ type DataTableProps = {
 
 export function DataTable({ fields, records, sort, onSortChange }: DataTableProps) {
   const parentRef = useRef<HTMLDivElement | null>(null)
+  const [scrollbarWidth, setScrollbarWidth] = useState(0)
   const rowVirtualizer = useVirtualizer({
     count: records.length,
     getScrollElement: () => parentRef.current,
@@ -23,6 +24,18 @@ export function DataTable({ fields, records, sort, onSortChange }: DataTableProp
   const columns = useMemo(() => fields.map((field) => field.name), [fields])
   const gridTemplateColumns = gridTemplate(columns.length)
   const tableMinWidth = `${columns.length * 140}px`
+
+  useLayoutEffect(() => {
+    function measureScrollbar() {
+      const element = parentRef.current
+      if (!element) return
+      setScrollbarWidth(element.offsetWidth - element.clientWidth)
+    }
+
+    measureScrollbar()
+    window.addEventListener("resize", measureScrollbar)
+    return () => window.removeEventListener("resize", measureScrollbar)
+  }, [columns.length, records.length])
 
   function toggleSort(field: string) {
     if (sort?.field !== field) {
@@ -40,7 +53,10 @@ export function DataTable({ fields, records, sort, onSortChange }: DataTableProp
     <div className="data-table-shell">
       <div className="data-table-scroll">
         <div className="data-table-inner" style={{ minWidth: tableMinWidth }}>
-          <div className="data-table-header" style={{ gridTemplateColumns }}>
+          <div
+            className="data-table-header"
+            style={{ gridTemplateColumns, paddingRight: `${scrollbarWidth}px` }}
+          >
             {columns.map((field) => (
               <button className="column-header" type="button" key={field} onClick={() => toggleSort(field)}>
                 <span>{field}</span>
