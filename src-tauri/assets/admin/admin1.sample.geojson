@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "云南", "country": "中国" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[100,20],[110,20],[110,30],[100,30],[100,20]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "浙江", "country": "中国" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[118,27],[123,27],[123,32],[118,32],[118,27]]]
+      }
+    }
+  ]
+}

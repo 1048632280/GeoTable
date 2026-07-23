@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod error;
 pub mod import;
 pub mod model;
