@@ -31,7 +31,6 @@ pub enum Geometry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct DerivedFields {
     pub admin_country: Option<String>,
     pub admin_level1: Option<String>,
