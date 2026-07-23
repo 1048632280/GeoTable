@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { useMemo, useRef, useState } from "react"
+import { FieldPanel } from "./components/FieldPanel"
+import { StatsPanel } from "./components/StatsPanel"
 import { Toolbar } from "./components/Toolbar"
 import { applyFilters } from "./lib/filtering"
 import type { Dataset, FilterState, ImportStatus } from "./types/geo"
@@ -19,6 +21,7 @@ export default function App() {
   const [filter, setFilter] = useState<FilterState>(initialFilter)
   const [status, setStatus] = useState<ImportStatus>("idle")
   const [error, setError] = useState<string | null>(null)
+  const [statsField, setStatsField] = useState("admin_country")
   const isOpeningRef = useRef(false)
 
   const filteredRecords = useMemo(
@@ -74,6 +77,18 @@ export default function App() {
     }
   }
 
+  function addFieldFilter(field: string, value: string) {
+    const current = filter.fieldFilters[field] ?? []
+    if (current.includes(value)) return
+    setFilter({
+      ...filter,
+      fieldFilters: {
+        ...filter.fieldFilters,
+        [field]: [...current, value],
+      },
+    })
+  }
+
   return (
     <main className="app-shell">
       <Toolbar
@@ -85,9 +100,29 @@ export default function App() {
         onExport={handleExport}
       />
       {error && <div className="error-banner">{error}</div>}
-      <section className="workbench-placeholder">
-        <h1>GeoTable</h1>
-        <p>字段、表格和统计面板将在后续任务接入。</p>
+      <section className="workbench-grid">
+        <FieldPanel
+          dataset={dataset}
+          records={filteredRecords}
+          filter={filter}
+          onFilterChange={setFilter}
+        />
+        <div className="table-placeholder">
+          <input
+            className="global-search"
+            value={filter.searchText}
+            onChange={(event) => setFilter({ ...filter, searchText: event.target.value })}
+            placeholder="全局搜索，例如：茶"
+          />
+          <p>表格将在下一任务接入。</p>
+        </div>
+        <StatsPanel
+          fields={dataset?.fields ?? []}
+          records={filteredRecords}
+          selectedField={statsField}
+          onSelectedFieldChange={setStatsField}
+          onAddFieldFilter={addFieldFilter}
+        />
       </section>
     </main>
   )

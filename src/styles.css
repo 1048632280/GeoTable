@@ -30,17 +30,6 @@ select {
   min-height: 100%;
 }
 
-.workbench-placeholder h1 {
-  margin: 0;
-  font-size: 32px;
-  letter-spacing: 0;
-}
-
-.workbench-placeholder p {
-  margin: 0;
-  color: #5c6970;
-}
-
 .toolbar {
   height: 56px;
   display: grid;
@@ -104,10 +93,117 @@ select {
   background: #fff0f0;
 }
 
-.workbench-placeholder {
-  min-height: calc(100vh - 56px);
+.workbench-grid {
+  height: calc(100vh - 56px);
   display: grid;
-  place-items: center;
-  align-content: center;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  overflow: hidden;
+}
+
+.side-panel,
+.stats-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  border-right: 1px solid #d8dee3;
+  background: #ffffff;
+}
+
+.stats-panel {
+  border-right: 0;
+  border-left: 1px solid #d8dee3;
+}
+
+.panel-header {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.panel-header button {
+  min-height: 28px;
+  border: 1px solid #c9d2d8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.text-input,
+.global-search {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #c9d2d8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.field-list,
+.value-list,
+.stats-list {
+  min-height: 0;
+  overflow: auto;
+}
+
+.field-row,
+.stats-row {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.field-row.active,
+.field-row:hover,
+.stats-row:hover {
+  background: #e8f3f1;
+}
+
+.field-row span,
+.stats-row span,
+.value-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-row small,
+.value-row small,
+.stats-row small {
+  color: #60707a;
+}
+
+.value-row {
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-placeholder {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
 }
