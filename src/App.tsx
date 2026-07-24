@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FieldPanel } from "./components/FieldPanel"
 import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
@@ -28,7 +28,7 @@ const initialFilter: FilterState = {
 
 const LAYOUT_STORAGE_KEY = "geotable.workbench-layout"
 const LEFT_PANE_MIN_WIDTH = 220
-const CENTER_PANE_MIN_WIDTH = 360
+const CENTER_PANE_MIN_WIDTH = 260
 const RIGHT_PANE_MIN_WIDTH = 240
 const SPLITTER_WIDTH = 8
 const DEFAULT_LAYOUT = { left: 280, right: 300 }
@@ -36,13 +36,26 @@ const SUPPORTED_IMPORT_EXTENSIONS = new Set(["shp", "kml", "kmz"])
 
 type WorkbenchLayout = typeof DEFAULT_LAYOUT
 
+type SplitterDrag = {
+  splitter: "left" | "right"
+  pointerId: number
+  startX: number
+  startLayout: WorkbenchLayout
+  viewportWidth: number
+}
+
 function clampLayout(layout: WorkbenchLayout, viewportWidth = window.innerWidth): WorkbenchLayout {
-  if (!Number.isFinite(layout.left) || !Number.isFinite(layout.right)) return DEFAULT_LAYOUT
+  if (!Number.isFinite(layout.left) || !Number.isFinite(layout.right)) {
+    return clampLayout(DEFAULT_LAYOUT, viewportWidth)
+  }
 
   const paneWidth = Math.max(0, viewportWidth - (SPLITTER_WIDTH * 2))
   const availableSideWidth = paneWidth - CENTER_PANE_MIN_WIDTH
   if (availableSideWidth < LEFT_PANE_MIN_WIDTH + RIGHT_PANE_MIN_WIDTH) {
-    return DEFAULT_LAYOUT
+    return {
+      left: Math.max(0, Math.floor(availableSideWidth / 2)),
+      right: Math.max(0, Math.ceil(availableSideWidth / 2)),
+    }
   }
 
   let left = Math.max(LEFT_PANE_MIN_WIDTH, Math.round(layout.left))
@@ -59,12 +72,14 @@ function clampLayout(layout: WorkbenchLayout, viewportWidth = window.innerWidth)
 function getStoredLayout(): WorkbenchLayout {
   try {
     const stored = localStorage.getItem(LAYOUT_STORAGE_KEY)
-    if (!stored) return DEFAULT_LAYOUT
+    if (!stored) return clampLayout(DEFAULT_LAYOUT)
     const parsed = JSON.parse(stored) as Partial<WorkbenchLayout>
-    if (typeof parsed.left !== "number" || typeof parsed.right !== "number") return DEFAULT_LAYOUT
+    if (typeof parsed.left !== "number" || typeof parsed.right !== "number") {
+      return clampLayout(DEFAULT_LAYOUT)
+    }
     return clampLayout({ left: parsed.left, right: parsed.right })
   } catch {
-    return DEFAULT_LAYOUT
+    return clampLayout(DEFAULT_LAYOUT)
   }
 }
 
@@ -106,6 +121,7 @@ export default function App() {
   const [layout, setLayout] = useState<WorkbenchLayout>(getStoredLayout)
   const isOpeningRef = useRef(false)
   const workbenchRef = useRef<HTMLElement | null>(null)
+  const splitterDragRef = useRef<SplitterDrag | null>(null)
 
   const baseRecords = useMemo(
     () => dataset
@@ -163,6 +179,23 @@ export default function App() {
     return () => window.removeEventListener("resize", updateLayoutForViewport)
   }, [])
 
+  const finishSplitterDrag = useCallback((splitter?: HTMLElement) => {
+    const drag = splitterDragRef.current
+    splitterDragRef.current = null
+    if (drag && splitter?.hasPointerCapture?.(drag.pointerId)) {
+      splitter.releasePointerCapture?.(drag.pointerId)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleWindowBlur = () => finishSplitterDrag()
+    window.addEventListener("blur", handleWindowBlur)
+    return () => {
+      window.removeEventListener("blur", handleWindowBlur)
+      finishSplitterDrag()
+    }
+  }, [finishSplitterDrag])
+
   const importDataset = useCallback(async (path: string) => {
     if (isOpeningRef.current) return
     isOpeningRef.current = true
@@ -211,27 +244,28 @@ export default function App() {
     }
   }, [importDataset])
 
-  function handleSplitterPointerDown(splitter: "left" | "right", startX: number) {
-    const startLayout = layout
+  function handleSplitterPointerDown(splitter: "left" | "right", event: ReactPointerEvent<HTMLDivElement>) {
     const workbenchWidth = workbenchRef.current?.clientWidth || window.innerWidth
-    const paneWidth = workbenchWidth - (SPLITTER_WIDTH * 2)
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const delta = event.clientX - startX
-      setLayout(() => clampLayout(
-        splitter === "left"
-          ? { ...startLayout, left: startLayout.left + delta }
-          : { ...startLayout, right: startLayout.right - delta },
-        paneWidth + (SPLITTER_WIDTH * 2),
-      ))
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    splitterDragRef.current = {
+      splitter,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startLayout: layout,
+      viewportWidth: workbenchWidth,
     }
-    const handlePointerUp = () => {
-      window.removeEventListener("pointermove", handlePointerMove)
-      window.removeEventListener("pointerup", handlePointerUp)
-    }
+  }
 
-    window.addEventListener("pointermove", handlePointerMove)
-    window.addEventListener("pointerup", handlePointerUp)
+  function handleSplitterPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = splitterDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const delta = event.clientX - drag.startX
+    setLayout(() => clampLayout(
+      drag.splitter === "left"
+        ? { ...drag.startLayout, left: drag.startLayout.left + delta }
+        : { ...drag.startLayout, right: drag.startLayout.right - delta },
+      drag.viewportWidth,
+    ))
   }
 
   async function handleOpen() {
@@ -331,7 +365,10 @@ export default function App() {
           role="separator"
           aria-label="调整字段面板宽度"
           aria-orientation="vertical"
-          onPointerDown={(event) => handleSplitterPointerDown("left", event.clientX)}
+          onPointerDown={(event) => handleSplitterPointerDown("left", event)}
+          onPointerMove={handleSplitterPointerMove}
+          onPointerUp={(event) => finishSplitterDrag(event.currentTarget)}
+          onLostPointerCapture={() => finishSplitterDrag()}
         />
         <div className="table-placeholder">
           <input
@@ -373,7 +410,10 @@ export default function App() {
           role="separator"
           aria-label="调整统计面板宽度"
           aria-orientation="vertical"
-          onPointerDown={(event) => handleSplitterPointerDown("right", event.clientX)}
+          onPointerDown={(event) => handleSplitterPointerDown("right", event)}
+          onPointerMove={handleSplitterPointerMove}
+          onPointerUp={(event) => finishSplitterDrag(event.currentTarget)}
+          onLostPointerCapture={() => finishSplitterDrag()}
         />
         <StatsPanel
           fields={visibleFields}

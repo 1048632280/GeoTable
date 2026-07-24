@@ -30,6 +30,10 @@ const saveMock = vi.mocked(save)
 const invokeMock = vi.mocked(invoke)
 const writeTextMock = vi.fn()
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width })
+}
+
 const teaDataset: Dataset = {
   fileName: "tea.kml",
   totalRecords: 1,
@@ -74,6 +78,7 @@ describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    setViewportWidth(1024)
     onDragDropEventMock.mockResolvedValue(vi.fn())
     writeTextMock.mockResolvedValue(undefined)
   })
@@ -92,17 +97,71 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "导出 CSV" })).toBeDisabled()
   })
 
-  it("persists widths adjusted with workbench splitters", () => {
-    render(<App />)
+  it("persists splitter widths and restores them after remounting", () => {
+    const { unmount } = render(<App />)
 
     const grid = document.querySelector<HTMLElement>(".workbench-grid")
     const splitter = screen.getByRole("separator", { name: "调整字段面板宽度" })
-    fireEvent.pointerDown(splitter, { clientX: 280 })
-    fireEvent.pointerMove(window, { clientX: 340 })
-    fireEvent.pointerUp(window)
+    fireEvent.pointerDown(splitter, { clientX: 280, pointerId: 1 })
+    fireEvent.pointerMove(splitter, { clientX: 340, pointerId: 1 })
+    fireEvent.pointerUp(splitter, { pointerId: 1 })
 
-    expect(grid).toHaveStyle({ gridTemplateColumns: "340px 8px minmax(360px, 1fr) 8px 300px" })
+    expect(grid).toHaveStyle({ gridTemplateColumns: "340px 8px minmax(260px, 1fr) 8px 300px" })
     expect(localStorage.getItem("geotable.workbench-layout")).toBe('{"left":340,"right":300}')
+
+    unmount()
+    render(<App />)
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "340px 8px minmax(260px, 1fr) 8px 300px",
+    })
+  })
+
+  it("uses a fitting fallback layout for narrow viewports and invalid saved values", () => {
+    setViewportWidth(800)
+    localStorage.setItem("geotable.workbench-layout", '{"left":"invalid","right":9999}')
+
+    render(<App />)
+
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "280px 8px minmax(260px, 1fr) 8px 244px",
+    })
+    expect(localStorage.getItem("geotable.workbench-layout")).toBe('{"left":280,"right":244}')
+  })
+
+  it("re-clamps the layout when the viewport shrinks and remains usable after restoration", () => {
+    localStorage.setItem("geotable.workbench-layout", '{"left":340,"right":300}')
+    render(<App />)
+
+    setViewportWidth(800)
+    fireEvent(window, new Event("resize"))
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "284px 8px minmax(260px, 1fr) 8px 240px",
+    })
+
+    setViewportWidth(1024)
+    fireEvent(window, new Event("resize"))
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "284px 8px minmax(260px, 1fr) 8px 240px",
+    })
+  })
+
+  it("ends splitter dragging when pointer capture is lost or the window loses focus", () => {
+    render(<App />)
+    const splitter = screen.getByRole("separator", { name: "调整字段面板宽度" })
+
+    fireEvent.pointerDown(splitter, { clientX: 280, pointerId: 1 })
+    fireEvent.lostPointerCapture(splitter, { pointerId: 1 })
+    fireEvent.pointerMove(splitter, { clientX: 340, pointerId: 1 })
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "280px 8px minmax(260px, 1fr) 8px 300px",
+    })
+
+    fireEvent.pointerDown(splitter, { clientX: 280, pointerId: 2 })
+    fireEvent(window, new Event("blur"))
+    fireEvent.pointerMove(splitter, { clientX: 340, pointerId: 2 })
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "280px 8px minmax(260px, 1fr) 8px 300px",
+    })
   })
 
   it("imports supported files dropped onto the Tauri window", async () => {
