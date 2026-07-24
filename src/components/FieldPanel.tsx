@@ -43,9 +43,11 @@ export function FieldPanel({ dataset, candidateRecords, filter, onFilterChange }
     const values = matchingValues.filter(
       (item, index) => index < 200 || selectedValues.includes(item.value),
     )
-    const countedValueSet = new Set(countedValues.map((item) => item.value))
+    const visibleValueSet = new Set(values.map((item) => item.value))
     for (const value of selectedValues) {
-      if (!countedValueSet.has(value)) values.push({ value, count: 0 })
+      if (visibleValueSet.has(value)) continue
+      const counted = countedValues.find((item) => item.value === value)
+      values.push(counted ?? { value, count: 0 })
     }
     return values
   }, [candidateRecords, dataset, filter.fieldFilters, selectedField, valueSearch])

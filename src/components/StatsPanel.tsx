@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { buildStats } from "../lib/filtering"
 import type { FeatureRecord, FieldDefinition } from "../types/geo"
 
@@ -21,6 +21,9 @@ export function StatsPanel({
 }: StatsPanelProps) {
   const stats = useMemo(() => buildStats(records, selectedField), [records, selectedField])
   const [statSearch, setStatSearch] = useState("")
+  useEffect(() => {
+    setStatSearch("")
+  }, [selectedField])
   const matchingStats = useMemo(() => {
     const query = statSearch.trim().toLocaleLowerCase()
     return query

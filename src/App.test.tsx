@@ -294,6 +294,39 @@ describe("App", () => {
     expect(onAddFieldFilter).toHaveBeenCalledWith("name", "值249")
   })
 
+  it("clears statistics value search when switching fields", async () => {
+    const props = {
+      fields: [
+        { name: "name", source: "original" } as const,
+        { name: "crop", source: "original" } as const,
+      ],
+      records: [
+        { id: 1, geometry: null, properties: { name: "茶树", crop: "茶" }, derived: {} },
+        { id: 2, geometry: null, properties: { name: "水稻", crop: "粮食" }, derived: {} },
+      ],
+      onSelectedFieldChange: vi.fn(),
+      onAddFieldFilter: vi.fn(),
+    }
+    const { rerender } = render(
+      <StatsPanel
+        {...props}
+        selectedField="name"
+      />,
+    )
+
+    await userEvent.type(screen.getByPlaceholderText("搜索统计值"), "茶")
+    expect(screen.queryByRole("button", { name: /水稻/ })).not.toBeInTheDocument()
+
+    rerender(
+      <StatsPanel
+        {...props}
+        selectedField="crop"
+      />,
+    )
+
+    expect(screen.getByPlaceholderText("搜索统计值")).toHaveValue("")
+  })
+
   it("searches field values beyond the facet cap before filtering", async () => {
     const records = Array.from({ length: 250 }, (_, index) => ({
       id: index + 1,
@@ -333,6 +366,41 @@ describe("App", () => {
       ...filter,
       fieldFilters: { name: ["值249"] },
     })
+  })
+
+  it("keeps selected facet values visible while a different value search is active", async () => {
+    const records = [
+      { id: 1, geometry: null, properties: { name: "茶树" }, derived: {} },
+      { id: 2, geometry: null, properties: { name: "水稻" }, derived: {} },
+    ]
+    const filter: FilterState = {
+      searchText: "",
+      searchMode: "all",
+      searchFields: [],
+      fieldFilters: { name: ["茶树"] },
+      sort: null,
+    }
+
+    render(
+      <FieldPanel
+        dataset={{
+          fileName: "values.kml",
+          totalRecords: records.length,
+          fields: [{ name: "name", source: "original" }],
+          records,
+          warnings: [],
+        }}
+        candidateRecords={records}
+        filter={filter}
+        onFilterChange={vi.fn()}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "name原始" }))
+    await userEvent.type(screen.getByPlaceholderText("搜索字段值"), "水")
+
+    expect(screen.getByRole("checkbox", { name: "茶树1" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "水稻1" })).toBeInTheDocument()
   })
 
   it("resets dataset-specific field selections after opening another dataset", async () => {
