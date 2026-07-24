@@ -332,19 +332,28 @@ describe("App", () => {
     await screen.findByText("已就绪")
 
     await user.selectOptions(screen.getByRole("combobox"), "admin_country")
-    await user.click(screen.getByRole("checkbox", { name: /中国.*1/ }))
-    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
-    expect(screen.getByRole("checkbox", { name: /澳大利亚.*2/ })).toBeInTheDocument()
+    expect(document.querySelector(".stats-list input[type='checkbox']")).toBeNull()
 
-    await user.click(screen.getByRole("checkbox", { name: /澳大利亚.*2/ }))
+    const chinaRow = screen.getByRole("button", { name: /中国.*1/ })
+    await user.click(chinaRow)
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+    expect(chinaRow).toHaveClass("selected")
+    expect(screen.getByRole("button", { name: /澳大利亚.*2/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /澳大利亚.*2/ }))
     expect(screen.getByText("当前结果 3")).toBeInTheDocument()
     expect(screen.getByText("国家: 中国、澳大利亚")).toBeInTheDocument()
 
     await user.selectOptions(screen.getByRole("combobox"), "name")
-    await user.click(screen.getByRole("checkbox", { name: /茶园.*1/ }))
+    await user.click(screen.getByRole("button", { name: /茶园.*1/ }))
 
     expect(screen.getByText("当前结果 1")).toBeInTheDocument()
     expect(screen.getByText("作物: 茶园")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /茶园.*1/ }))
+
+    expect(screen.getByText("当前结果 3")).toBeInTheDocument()
+    expect(screen.queryByText("作物: 茶园")).not.toBeInTheDocument()
   })
 
   it("clears right-panel tag filters without clearing global search", async () => {
@@ -360,7 +369,7 @@ describe("App", () => {
     expect(screen.getByText("当前结果 2")).toBeInTheDocument()
 
     await user.selectOptions(screen.getByRole("combobox"), "admin_country")
-    await user.click(screen.getByRole("checkbox", { name: /中国.*1/ }))
+    await user.click(screen.getByRole("button", { name: /中国.*1/ }))
     expect(screen.getByText("当前结果 1")).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "清空" }))
@@ -448,10 +457,10 @@ describe("App", () => {
     await screen.findByText("已就绪")
 
     await user.selectOptions(screen.getByRole("combobox"), "name")
-    await user.click(screen.getByRole("checkbox", { name: /茶树.*1/ }))
-    expect(screen.getByRole("checkbox", { name: /咖啡.*1/ })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: /茶树.*1/ }))
+    expect(screen.getByRole("button", { name: /咖啡.*1/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole("checkbox", { name: /咖啡.*1/ }))
+    await user.click(screen.getByRole("button", { name: /咖啡.*1/ }))
     expect(screen.getByText("当前结果 2")).toBeInTheDocument()
   })
 
@@ -596,7 +605,7 @@ describe("App", () => {
     )
 
     await userEvent.type(screen.getByPlaceholderText("搜索统计值"), "值249")
-    await userEvent.click(screen.getByRole("checkbox", { name: /值249.*1/ }))
+    await userEvent.click(screen.getByRole("button", { name: /值249.*1/ }))
 
     expect(onFieldFiltersChange).toHaveBeenCalledWith({ name: ["值249"] })
   })

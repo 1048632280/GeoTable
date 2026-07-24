@@ -255,12 +255,12 @@ select {
 
 .stats-row {
   width: 100%;
-  min-height: 34px;
+  min-height: 44px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px;
+  gap: 12px;
+  padding: 6px 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -306,7 +306,6 @@ select {
 }
 
 .field-row span,
-.stats-row span,
 .value-row span {
   min-width: 0;
   overflow: hidden;
@@ -318,6 +317,24 @@ select {
 .value-row small,
 .stats-row small {
   color: #60707a;
+}
+
+.stats-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.stats-row-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-row strong {
+  min-width: 48px;
+  text-align: right;
 }
 
 .field-metadata {

@@ -132,22 +132,22 @@ export function StatsPanel({
       />
       <div className="stats-list">
         {visibleStats.map((row) => {
-          const checked = (fieldFilters[selectedField] ?? []).includes(row.value)
+          const selected = (fieldFilters[selectedField] ?? []).includes(row.value)
           const label = displayFieldValue(row.value)
           return (
-            <label
-              className={checked ? "stats-row selected" : "stats-row"}
+            <button
+              className={selected ? "stats-row selected" : "stats-row"}
               key={row.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => toggleStatsValue(row.value)}
             >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleStatsValue(row.value)}
-              />
-              <span>{label}</span>
+              <span className="stats-row-main">
+                <span className="stats-row-value">{label}</span>
+                <small>{(row.ratio * 100).toFixed(1)}%</small>
+              </span>
               <strong>{row.count.toLocaleString("zh-CN")}</strong>
-              <small>{(row.ratio * 100).toFixed(1)}%</small>
-            </label>
+            </button>
           )
         })}
       </div>
