@@ -10,6 +10,17 @@ const SOURCE_BASE = `https://raw.githubusercontent.com/nvkelso/natural-earth-vec
 const ADMIN0_SOURCE = "ne_10m_admin_0_countries_chn.geojson";
 const ADMIN1_SOURCE = "ne_10m_admin_1_states_provinces.geojson";
 const outputDirectory = dirname(fileURLToPath(import.meta.url));
+// Natural Earth Admin 1 中的特殊区域代码需与中国视角 Admin 0 的父代码保持一致。
+const ADMIN1_PARENT_CODE_OVERRIDES = new Map([
+  ["TWN", "CHN"],
+  ["SOL", "SOM"],
+  ["KOS", "SRB"],
+  ["USG", "CUB"],
+  ["CYN", "CYP"],
+  ["KAS", "IND"],
+  ["KAB", "KAZ"],
+  ["PGA", "CHN"],
+]);
 
 function stringProperty(properties, key) {
   const value = properties[key];
@@ -60,8 +71,9 @@ function prepareAdmin1(source, countryNames) {
     type: "FeatureCollection",
     features: source.features.map((feature) => {
       const properties = feature.properties;
-      const isTaiwan = stringProperty(properties, "adm0_a3") === "TWN";
-      const countryCode = isTaiwan ? "CHN" : stringProperty(properties, "adm0_a3") ?? "-99";
+      const sourceCountryCode = stringProperty(properties, "adm0_a3") ?? "-99";
+      const isTaiwan = sourceCountryCode === "TWN";
+      const countryCode = ADMIN1_PARENT_CODE_OVERRIDES.get(sourceCountryCode) ?? sourceCountryCode;
       return {
         type: "Feature",
         properties: {

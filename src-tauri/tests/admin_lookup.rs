@@ -4,7 +4,7 @@ use geotable_lib::model::{
     ImportWarning, WarningCode,
 };
 use pretty_assertions::assert_eq;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 const ADMIN0: &str = r#"{
   "type": "FeatureCollection",
@@ -190,6 +190,49 @@ fn production_boundaries_cover_global_admin1_with_china_pov() {
         Some("加利福尼亚州")
     );
     assert!(enriched.warnings.is_empty());
+}
+
+#[test]
+fn production_boundaries_normalize_disputed_admin1_parent_codes() {
+    let index = production_admin_index().expect("production index");
+    let dataset = dataset_with_points(&[(44.06, 9.56), (33.38, 35.18)], vec![]);
+
+    let enriched = enrich_dataset(dataset, index);
+
+    assert_eq!(
+        enriched.records[0].derived.admin_country.as_deref(),
+        Some("索马里")
+    );
+    assert_eq!(
+        enriched.records[0].derived.admin_level1.as_deref(),
+        Some("索马里兰")
+    );
+    assert_eq!(
+        enriched.records[1].derived.admin_country.as_deref(),
+        Some("塞浦路斯")
+    );
+    assert_eq!(
+        enriched.records[1].derived.admin_level1.as_deref(),
+        Some("北塞浦路斯")
+    );
+    assert!(enriched.warnings.is_empty());
+}
+
+#[test]
+fn production_admin1_parent_codes_exist_in_china_pov_admin0() {
+    let index = production_admin_index().expect("production index");
+    let country_codes = index
+        .countries
+        .iter()
+        .filter_map(|polygon| polygon.code.as_deref())
+        .collect::<BTreeSet<_>>();
+
+    assert!(index.level1.iter().all(|polygon| {
+        polygon
+            .country_code
+            .as_deref()
+            .is_some_and(|code| country_codes.contains(code))
+    }));
 }
 
 #[test]
