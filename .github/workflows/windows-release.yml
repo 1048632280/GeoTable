@@ -1,26 +1,23 @@
 name: Windows Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: "Release tag. 留空时使用 package.json 版本和 run number 生成测试发布 tag。"
-        required: false
+      version:
+        description: "Release version, for example 0.1.0 or v0.1.0."
+        required: true
         type: string
       prerelease:
         description: "Mark the GitHub release as prerelease"
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:
   contents: write
 
 concurrency:
-  group: windows-release-${{ github.ref }}
+  group: windows-release-${{ inputs.version }}
   cancel-in-progress: false
 
 env:
@@ -28,51 +25,6 @@ env:
   PNPM_VERSION: 10.19.0
 
 jobs:
-  test:
-    name: Test
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Setup Rust
-        shell: pwsh
-        run: rustup default stable
-
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: windows-cargo-test-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: |
-            windows-cargo-test-
-            windows-cargo-
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run frontend tests
-        run: pnpm test
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
   build-windows:
     name: Build Windows Executable
     runs-on: windows-latest
@@ -104,8 +56,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: windows-cargo-build-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: windows-cargo-release-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
+            windows-cargo-release-
             windows-cargo-build-
             windows-cargo-
 
@@ -145,10 +98,10 @@ jobs:
             Select-Object Name, Length |
             Format-Table -AutoSize
 
-      - name: Upload Windows build artifact
+      - name: Upload Windows release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: geotable-windows-${{ github.sha }}
+          name: geotable-release-${{ github.sha }}
           path: release-assets/*
           if-no-files-found: error
 
@@ -162,24 +115,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Windows build artifact
+      - name: Download Windows release artifact
         uses: actions/download-artifact@v4
         with:
-          name: geotable-windows-${{ github.sha }}
+          name: geotable-release-${{ github.sha }}
           path: release-assets
 
       - name: Resolve release tag
         id: release
         shell: pwsh
         run: |
-          $inputTag = "${{ inputs.tag_name }}"
-          if ("${{ github.ref_type }}" -eq "tag") {
-            $tag = "${{ github.ref_name }}"
-          } elseif (-not [string]::IsNullOrWhiteSpace($inputTag)) {
-            $tag = $inputTag
+          $version = "${{ inputs.version }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Release version is required."
+          }
+
+          if ($version.StartsWith("v")) {
+            $tag = $version
           } else {
-            $package = Get-Content -Encoding UTF8 package.json -Raw | ConvertFrom-Json
-            $tag = "v$($package.version)-build-${{ github.run_number }}"
+            $tag = "v$version"
           }
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
@@ -219,7 +173,7 @@ jobs:
             "--title",
             "GeoTable $tag",
             "--notes",
-            "Automated Windows build from commit ${{ github.sha }}."
+            "Automated Windows release from commit ${{ github.sha }}."
           )
 
           if ("${{ inputs.prerelease }}" -eq "true") {

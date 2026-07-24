@@ -21,16 +21,16 @@ cargo test --manifest-path src-tauri/Cargo.toml
 pnpm build
 ```
 
-## GitHub Release 打包
+## GitHub Actions
 
-推送 `v*` tag 会触发 `Windows Release` workflow，自动构建 Windows exe / installer，并上传到对应 GitHub Release：
+`Windows CI` workflow 会在每次 push 到分支、PR 和手动触发时运行。它包含两个互不依赖的 job：
 
-```powershell
-git tag v0.1.0-test
-git push origin v0.1.0-test
-```
+- `Build Windows Executable`：构建 Windows exe / installer，并上传 `geotable-windows-${sha}` artifact。
+- `Test`：运行前端测试和 Rust 测试。
 
-也可以在 GitHub Actions 页面手动运行 workflow，并填写 `tag_name`。测试 job 和打包 job 是并行独立的；Release 发布只依赖打包 job，因此测试失败会保留红灯，但不会阻止 exe 产物生成和上传。
+因此测试失败会让 CI 显示红灯，但不会阻止构建 job 生产和上传 exe artifact。
+
+发布使用单独的 `Windows Release` workflow。在 GitHub Actions 页面手动运行它，输入版本号，例如 `0.1.0` 或 `v0.1.0`，workflow 会构建 Windows exe / installer，并发布到对应 GitHub Release。
 
 ## 第一版限制
 
