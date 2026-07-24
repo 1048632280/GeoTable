@@ -21,6 +21,17 @@ cargo test --manifest-path src-tauri/Cargo.toml
 pnpm build
 ```
 
+## GitHub Release 打包
+
+推送 `v*` tag 会触发 `Windows Release` workflow，自动构建 Windows exe / installer，并上传到对应 GitHub Release：
+
+```powershell
+git tag v0.1.0-test
+git push origin v0.1.0-test
+```
+
+也可以在 GitHub Actions 页面手动运行 workflow，并填写 `tag_name`。测试 job 和打包 job 是并行独立的；Release 发布只依赖打包 job，因此测试失败会保留红灯，但不会阻止 exe 产物生成和上传。
+
 ## 第一版限制
 
 - 不显示地图。
