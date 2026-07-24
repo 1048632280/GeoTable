@@ -19,7 +19,7 @@ const records: FeatureRecord[] = [
   {
     id: 2,
     geometry: { type: "Point", lon: 120.2, lat: 30.2 },
-    properties: { name: "茶园", crop: "茶", samples: 5 },
+    properties: { name: "茶树园", crop: "茶", samples: 5 },
     derived: { admin_country: "中国", admin_level1: "浙江" },
   },
   {

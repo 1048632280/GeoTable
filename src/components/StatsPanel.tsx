@@ -59,6 +59,7 @@ export function StatsPanel({
         value={selectedField}
         onChange={(event) => onSelectedFieldChange(event.target.value)}
       >
+        {fields.length === 0 && <option value="" disabled>无可见字段</option>}
         {fields.map((field) => (
           <option key={field.name} value={field.name}>
             {field.name}

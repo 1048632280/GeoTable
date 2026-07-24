@@ -109,6 +109,92 @@ describe("App", () => {
     expect(screen.getByRole("checkbox", { name: "茶树1" })).not.toBeChecked()
   })
 
+  it("wires field visibility into the table and statistics selector", async () => {
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(teaDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    expect(screen.getByRole("button", { name: "admin_country" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "隐藏admin_country" }))
+
+    expect(screen.queryByRole("button", { name: "admin_country" })).not.toBeInTheDocument()
+    expect(screen.getByRole("combobox")).toHaveValue("name")
+    expect(screen.queryByRole("option", { name: "admin_country" })).not.toBeInTheDocument()
+  })
+
+  it("exposes hidden-field and exact search options", async () => {
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(teaDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    const hiddenFields = screen.getByRole("checkbox", { name: "搜索隐藏字段" })
+    const exactSearch = screen.getByRole("checkbox", { name: "精确搜索" })
+    await user.click(hiddenFields)
+    await user.click(exactSearch)
+
+    expect(hiddenFields).toBeChecked()
+    expect(exactSearch).toBeChecked()
+  })
+
+  it("supports field visibility batch controls", async () => {
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(teaDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    await user.click(screen.getByRole("button", { name: "全部隐藏" }))
+    expect(screen.queryByRole("button", { name: "name" })).not.toBeInTheDocument()
+    expect(screen.getByRole("combobox")).toHaveValue("")
+
+    await user.click(screen.getByRole("button", { name: "全部显示" }))
+    expect(screen.getByRole("button", { name: "name" })).toBeInTheDocument()
+    expect(screen.getByRole("combobox")).toHaveValue("admin_country")
+  })
+
+  it("limits visibility batch actions to matching and non-empty fields", async () => {
+    const dataset: Dataset = {
+      ...teaDataset,
+      fields: [
+        { name: "name", source: "original" },
+        { name: "empty", source: "original" },
+        { name: "admin_country", source: "derived" },
+      ],
+      records: [{
+        ...teaDataset.records[0],
+        properties: { name: "茶树", empty: null },
+      }],
+    }
+    openMock.mockResolvedValueOnce("tea.kml")
+    invokeMock.mockResolvedValueOnce(dataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    await user.type(screen.getByPlaceholderText("搜索字段名"), "name")
+    await user.click(screen.getByRole("button", { name: "只显示搜索结果" }))
+    expect(screen.getByRole("button", { name: "name" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "admin_country" })).not.toBeInTheDocument()
+
+    await user.clear(screen.getByPlaceholderText("搜索字段名"))
+    await user.click(screen.getByRole("button", { name: "全部显示" }))
+    await user.click(screen.getByRole("button", { name: "隐藏空字段" }))
+    expect(screen.getByRole("button", { name: "name" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "empty" })).not.toBeInTheDocument()
+  })
+
   it("keeps selected values visible when another field narrows candidates", async () => {
     openMock.mockResolvedValueOnce("tea.kml")
     invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)

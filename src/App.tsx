@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { FieldPanel } from "./components/FieldPanel"
 import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
@@ -88,6 +88,20 @@ export default function App() {
     [baseRecords, filter, statsField],
   )
   const warningGroups = useMemo(() => warningSummary(dataset?.warnings ?? []), [dataset])
+  const visibleFields = useMemo(() => {
+    const visibleFieldNames = new Set(filter.visibleFields)
+    return (dataset?.fields ?? []).filter((field) => visibleFieldNames.has(field.name))
+  }, [dataset, filter.visibleFields])
+
+  useEffect(() => {
+    const visibleFieldNames = new Set(visibleFields.map((field) => field.name))
+    if (visibleFieldNames.has(statsField)) return
+    setStatsField(
+      visibleFieldNames.has("admin_country")
+        ? "admin_country"
+        : (visibleFields[0]?.name ?? ""),
+    )
+  }, [statsField, visibleFields])
 
   async function handleOpen() {
     if (isOpeningRef.current) return
@@ -193,15 +207,36 @@ export default function App() {
             onChange={(event) => setFilter({ ...filter, searchText: event.target.value })}
             placeholder="全局搜索，例如：茶"
           />
+          <div className="search-options" aria-label="搜索选项">
+            <label>
+              <input
+                type="checkbox"
+                checked={filter.includeHiddenFieldsInSearch}
+                onChange={(event) => setFilter({
+                  ...filter,
+                  includeHiddenFieldsInSearch: event.target.checked,
+                })}
+              />
+              搜索隐藏字段
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={filter.exactSearch}
+                onChange={(event) => setFilter({ ...filter, exactSearch: event.target.checked })}
+              />
+              精确搜索
+            </label>
+          </div>
           <DataTable
-            fields={dataset?.fields ?? []}
+            fields={visibleFields}
             records={filteredRecords}
             sort={filter.sort}
             onSortChange={(sort) => setFilter({ ...filter, sort })}
           />
         </div>
         <StatsPanel
-          fields={dataset?.fields ?? []}
+          fields={visibleFields}
           records={statsRecords}
           selectedField={statsField}
           onSelectedFieldChange={setStatsField}

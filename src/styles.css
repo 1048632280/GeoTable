@@ -170,6 +170,37 @@ select {
   background: #ffffff;
 }
 
+.search-options,
+.field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.search-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.field-actions button,
+.field-visibility-button {
+  min-height: 28px;
+  border: 1px solid #c9d2d8;
+  border-radius: 4px;
+  color: #172026;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.field-actions button {
+  padding: 0 6px;
+  font-size: 12px;
+}
+
 .field-list,
 .value-list,
 .stats-list {
@@ -193,6 +224,26 @@ select {
   cursor: pointer;
 }
 
+.field-row-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 4px;
+}
+
+.field-visibility-button {
+  width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
 .field-row.active,
 .field-row:hover,
 .stats-row:hover {
@@ -214,6 +265,20 @@ select {
   color: #60707a;
 }
 
+.field-metadata {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.field-metadata small:last-child {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .list-limit {
   color: #60707a;
 }
@@ -229,7 +294,7 @@ select {
 .table-placeholder {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
   overflow: hidden;
