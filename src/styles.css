@@ -175,11 +175,18 @@ select {
   font-size: 15px;
 }
 
-.panel-header button {
+.panel-header button,
+.filter-tag button {
   min-height: 28px;
   border: 1px solid #c9d2d8;
   border-radius: 6px;
   background: #ffffff;
+}
+
+.panel-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .text-input,
@@ -209,7 +216,8 @@ select {
 }
 
 .field-actions button,
-.field-visibility-button {
+.field-visibility-button,
+.field-group-toggle {
   min-height: 28px;
   border: 1px solid #c9d2d8;
   border-radius: 4px;
@@ -230,12 +238,26 @@ select {
   overflow: auto;
 }
 
-.field-row,
-.stats-row {
+.field-row {
   width: 100%;
   min-height: 34px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stats-row {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   padding: 0 8px;
@@ -266,9 +288,20 @@ select {
   padding: 0;
 }
 
+.field-group-wrap {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field-group-toggle {
+  width: 100%;
+  padding: 0 8px;
+  text-align: left;
+}
+
 .field-row.active,
 .field-row:hover,
-.stats-row:hover {
+.stats-row:hover,
+.stats-row.selected {
   background: #e8f3f1;
 }
 
@@ -292,6 +325,39 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: 5px;
+}
+
+.filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-tag {
+  max-width: 100%;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  border: 1px solid #9fc9c2;
+  border-radius: 6px;
+  background: #e8f3f1;
+}
+
+.filter-tag span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-tag button {
+  min-width: 28px;
+  padding: 0 6px;
+  border-width: 0 0 0 1px;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
 }
 
 .field-metadata small:last-child {

@@ -83,7 +83,7 @@ describe("DataTable", () => {
       <DataTable fields={fields} records={records} sort={null} onSortChange={onSortChange} />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "name" }))
+    fireEvent.click(screen.getByRole("button", { name: "作物" }))
     expect(onSortChange).toHaveBeenLastCalledWith({ field: "name", direction: "asc" })
 
     rerender(
@@ -94,7 +94,7 @@ describe("DataTable", () => {
         onSortChange={onSortChange}
       />,
     )
-    fireEvent.click(screen.getByRole("button", { name: "name" }))
+    fireEvent.click(screen.getByRole("button", { name: "作物" }))
     expect(onSortChange).toHaveBeenLastCalledWith({ field: "name", direction: "desc" })
 
     rerender(
@@ -105,7 +105,7 @@ describe("DataTable", () => {
         onSortChange={onSortChange}
       />,
     )
-    fireEvent.click(screen.getByRole("button", { name: "name" }))
+    fireEvent.click(screen.getByRole("button", { name: "作物" }))
     expect(onSortChange).toHaveBeenLastCalledWith(null)
   })
 })

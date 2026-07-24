@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
 import { useLayoutEffect, useMemo, useRef, useState } from "react"
+import { displayFieldName } from "../lib/display"
 import { getRecordValue } from "../lib/filtering"
 import type { FeatureRecord, FieldDefinition, FilterState } from "../types/geo"
 
@@ -59,7 +60,7 @@ export function DataTable({ fields, records, sort, onSortChange }: DataTableProp
           >
             {columns.map((field) => (
               <button className="column-header" type="button" key={field} onClick={() => toggleSort(field)}>
-                <span>{field}</span>
+                <span title={field}>{displayFieldName(field)}</span>
                 {sort?.field === field ? (
                   sort.direction === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
                 ) : (

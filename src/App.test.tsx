@@ -4,9 +4,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { FieldPanel } from "./components/FieldPanel"
 import { StatsPanel } from "./components/StatsPanel"
-import type { Dataset, FilterState } from "./types/geo"
+import type { Dataset } from "./types/geo"
 
 const { onDragDropEventMock } = vi.hoisted(() => ({
   onDragDropEventMock: vi.fn(),
@@ -64,6 +63,45 @@ const teaAndCoffeeDataset: Dataset = {
       derived: { admin_country: "越南", admin_level1: "林同" },
     },
   ],
+}
+
+const cropFilterDataset: Dataset = {
+  fileName: "crops.kml",
+  totalRecords: 4,
+  fields: [
+    { name: "name", source: "original" },
+    { name: "note", source: "original" },
+    { name: "soil", source: "original" },
+    { name: "admin_country", source: "derived" },
+    { name: "admin_level1", source: "derived" },
+  ],
+  records: [
+    {
+      id: 1,
+      geometry: null,
+      properties: { name: "茶园", note: "高山", soil: "红壤" },
+      derived: { admin_country: "中华人民共和国", admin_level1: "云南" },
+    },
+    {
+      id: 2,
+      geometry: null,
+      properties: { name: "茶树", note: "沿海", soil: "砂壤" },
+      derived: { admin_country: "澳大利亚", admin_level1: "昆士兰" },
+    },
+    {
+      id: 3,
+      geometry: null,
+      properties: { name: "小麦", note: "平原", soil: "黑土" },
+      derived: { admin_country: "澳大利亚", admin_level1: "维多利亚" },
+    },
+    {
+      id: 4,
+      geometry: null,
+      properties: { name: "咖啡", note: "山地", soil: "火山土" },
+      derived: { admin_country: "越南", admin_level1: "林同" },
+    },
+  ],
+  warnings: [],
 }
 
 function deferred<T>() {
@@ -221,7 +259,7 @@ describe("App", () => {
     expect(invokeMock).not.toHaveBeenCalled()
   })
 
-  it("updates search text and supports multi-value filters for the same field", async () => {
+  it("updates global search text", async () => {
     openMock.mockResolvedValueOnce("tea.kml")
     invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)
     const user = userEvent.setup()
@@ -232,20 +270,6 @@ describe("App", () => {
 
     await user.type(screen.getByPlaceholderText("全局搜索，例如：茶"), "茶")
     expect(screen.getByText("当前结果 1")).toBeInTheDocument()
-
-    await user.clear(screen.getByPlaceholderText("全局搜索，例如：茶"))
-
-    await user.click(screen.getByRole("button", { name: "name原始" }))
-    await user.click(screen.getByRole("checkbox", { name: "茶树1" }))
-    expect(screen.getByRole("checkbox", { name: "茶树1" })).toBeChecked()
-    expect(screen.getByRole("checkbox", { name: "咖啡1" })).toBeInTheDocument()
-
-    await user.click(screen.getByRole("checkbox", { name: "咖啡1" }))
-    expect(screen.getByRole("checkbox", { name: "茶树1" })).toBeChecked()
-    expect(screen.getByRole("checkbox", { name: "咖啡1" })).toBeChecked()
-
-    await user.click(screen.getByRole("button", { name: "清除筛选" }))
-    expect(screen.getByRole("checkbox", { name: "茶树1" })).not.toBeChecked()
   })
 
   it("wires field visibility into the table and statistics selector", async () => {
@@ -257,12 +281,92 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "打开文件" }))
     await screen.findByText("已就绪")
 
-    expect(screen.getByRole("button", { name: "admin_country" })).toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "隐藏admin_country" }))
+    expect(screen.getByRole("button", { name: "国家" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "隐藏国家" }))
 
-    expect(screen.queryByRole("button", { name: "admin_country" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "国家" })).not.toBeInTheDocument()
     expect(screen.getByRole("combobox")).toHaveValue("name")
-    expect(screen.queryByRole("option", { name: "admin_country" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("option", { name: "国家" })).not.toBeInTheDocument()
+  })
+
+  it("shows the left panel as field management without samples or value filters", async () => {
+    openMock.mockResolvedValueOnce("crops.kml")
+    invokeMock.mockResolvedValueOnce(cropFilterDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    expect(screen.getByRole("button", { name: "隐藏作物" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "隐藏国家" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "隐藏一级行政区" })).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText("搜索字段值")).not.toBeInTheDocument()
+    expect(screen.queryByText(/样例：/)).not.toBeInTheDocument()
+  })
+
+  it("collapses non-name original fields and expands matches during field search", async () => {
+    openMock.mockResolvedValueOnce("crops.kml")
+    invokeMock.mockResolvedValueOnce(cropFilterDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    expect(screen.getByRole("button", { name: "其他原始字段（2）" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "隐藏soil" })).not.toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText("搜索字段名"), "soil")
+
+    expect(screen.getByRole("button", { name: "隐藏soil" })).toBeInTheDocument()
+  })
+
+  it("uses right-panel tags for same-field OR and cross-field AND filters", async () => {
+    openMock.mockResolvedValueOnce("crops.kml")
+    invokeMock.mockResolvedValueOnce(cropFilterDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    await user.selectOptions(screen.getByRole("combobox"), "admin_country")
+    await user.click(screen.getByRole("checkbox", { name: /中国.*1/ }))
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+    expect(screen.getByRole("checkbox", { name: /澳大利亚.*2/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("checkbox", { name: /澳大利亚.*2/ }))
+    expect(screen.getByText("当前结果 3")).toBeInTheDocument()
+    expect(screen.getByText("国家: 中国、澳大利亚")).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByRole("combobox"), "name")
+    await user.click(screen.getByRole("checkbox", { name: /茶园.*1/ }))
+
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+    expect(screen.getByText("作物: 茶园")).toBeInTheDocument()
+  })
+
+  it("clears right-panel tag filters without clearing global search", async () => {
+    openMock.mockResolvedValueOnce("crops.kml")
+    invokeMock.mockResolvedValueOnce(cropFilterDataset)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "打开文件" }))
+    await screen.findByText("已就绪")
+
+    await user.type(screen.getByPlaceholderText("全局搜索，例如：茶"), "茶")
+    expect(screen.getByText("当前结果 2")).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByRole("combobox"), "admin_country")
+    await user.click(screen.getByRole("checkbox", { name: /中国.*1/ }))
+    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "清空" }))
+
+    expect(screen.getByText("当前结果 2")).toBeInTheDocument()
+    expect(screen.queryByText("国家: 中国")).not.toBeInTheDocument()
   })
 
   it("exposes hidden-field and exact search options", async () => {
@@ -293,11 +397,11 @@ describe("App", () => {
     await screen.findByText("已就绪")
 
     await user.click(screen.getByRole("button", { name: "全部隐藏" }))
-    expect(screen.queryByRole("button", { name: "name" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "作物" })).not.toBeInTheDocument()
     expect(screen.getByRole("combobox")).toHaveValue("")
 
     await user.click(screen.getByRole("button", { name: "全部显示" }))
-    expect(screen.getByRole("button", { name: "name" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "作物" })).toBeInTheDocument()
     expect(screen.getByRole("combobox")).toHaveValue("admin_country")
   })
 
@@ -324,40 +428,14 @@ describe("App", () => {
 
     await user.type(screen.getByPlaceholderText("搜索字段名"), "name")
     await user.click(screen.getByRole("button", { name: "只显示搜索结果" }))
-    expect(screen.getByRole("button", { name: "name" })).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "admin_country" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "作物" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "国家" })).not.toBeInTheDocument()
 
     await user.clear(screen.getByPlaceholderText("搜索字段名"))
     await user.click(screen.getByRole("button", { name: "全部显示" }))
     await user.click(screen.getByRole("button", { name: "隐藏空字段" }))
-    expect(screen.getByRole("button", { name: "name" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "作物" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "empty" })).not.toBeInTheDocument()
-  })
-
-  it("keeps selected values visible when another field narrows candidates", async () => {
-    openMock.mockResolvedValueOnce("tea.kml")
-    invokeMock.mockResolvedValueOnce(teaAndCoffeeDataset)
-    const user = userEvent.setup()
-
-    render(<App />)
-    await user.click(screen.getByRole("button", { name: "打开文件" }))
-    await screen.findByText("已就绪")
-
-    await user.click(screen.getByRole("button", { name: "admin_country派生" }))
-    await user.click(screen.getByRole("checkbox", { name: "中国1" }))
-    await user.click(screen.getByRole("checkbox", { name: "越南1" }))
-
-    await user.click(screen.getByRole("button", { name: "name原始" }))
-    await user.click(screen.getByRole("checkbox", { name: "茶树1" }))
-    await user.click(screen.getByRole("button", { name: "admin_country派生" }))
-    await user.click(screen.getByRole("checkbox", { name: "中国1" }))
-
-    await user.click(screen.getByRole("button", { name: "name原始" }))
-    const selectedValue = screen.getByRole("checkbox", { name: "茶树0" })
-    expect(selectedValue).toBeChecked()
-
-    await user.click(selectedValue)
-    expect(screen.getByText("当前结果 1")).toBeInTheDocument()
   })
 
   it("allows filtering consecutive statistic rows for the selected field", async () => {
@@ -370,10 +448,10 @@ describe("App", () => {
     await screen.findByText("已就绪")
 
     await user.selectOptions(screen.getByRole("combobox"), "name")
-    await user.click(screen.getByRole("button", { name: "茶树150.0%" }))
-    expect(screen.getByRole("button", { name: "咖啡150.0%" })).toBeInTheDocument()
+    await user.click(screen.getByRole("checkbox", { name: /茶树.*1/ }))
+    expect(screen.getByRole("checkbox", { name: /咖啡.*1/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole("button", { name: "咖啡150.0%" }))
+    await user.click(screen.getByRole("checkbox", { name: /咖啡.*1/ }))
     expect(screen.getByText("当前结果 2")).toBeInTheDocument()
   })
 
@@ -387,8 +465,9 @@ describe("App", () => {
         fields={teaAndCoffeeDataset.fields}
         records={teaAndCoffeeDataset.records}
         selectedField="name"
+        fieldFilters={{}}
         onSelectedFieldChange={vi.fn()}
-        onAddFieldFilter={vi.fn()}
+        onFieldFiltersChange={vi.fn()}
       />,
     )
     fireEvent.click(screen.getByRole("button", { name: "复制" }))
@@ -409,8 +488,9 @@ describe("App", () => {
         fields={teaDataset.fields}
         records={teaDataset.records}
         selectedField="name"
+        fieldFilters={{}}
         onSelectedFieldChange={vi.fn()}
-        onAddFieldFilter={vi.fn()}
+        onFieldFiltersChange={vi.fn()}
       />,
     )
     fireEvent.click(screen.getByRole("button", { name: "复制" }))
@@ -485,8 +565,9 @@ describe("App", () => {
         fields={[{ name: "name", source: "original" }]}
         records={records}
         selectedField="name"
+        fieldFilters={{}}
         onSelectedFieldChange={vi.fn()}
-        onAddFieldFilter={vi.fn()}
+        onFieldFiltersChange={vi.fn()}
       />,
     )
 
@@ -501,22 +582,23 @@ describe("App", () => {
       properties: { name: `值${index}` },
       derived: {},
     }))
-    const onAddFieldFilter = vi.fn()
+    const onFieldFiltersChange = vi.fn()
 
     render(
       <StatsPanel
         fields={[{ name: "name", source: "original" }]}
         records={records}
         selectedField="name"
+        fieldFilters={{}}
         onSelectedFieldChange={vi.fn()}
-        onAddFieldFilter={onAddFieldFilter}
+        onFieldFiltersChange={onFieldFiltersChange}
       />,
     )
 
     await userEvent.type(screen.getByPlaceholderText("搜索统计值"), "值249")
-    await userEvent.click(screen.getByRole("button", { name: /值249/ }))
+    await userEvent.click(screen.getByRole("checkbox", { name: /值249.*1/ }))
 
-    expect(onAddFieldFilter).toHaveBeenCalledWith("name", "值249")
+    expect(onFieldFiltersChange).toHaveBeenCalledWith({ name: ["值249"] })
   })
 
   it("clears statistics value search when switching fields", async () => {
@@ -529,8 +611,9 @@ describe("App", () => {
         { id: 1, geometry: null, properties: { name: "茶树", crop: "茶" }, derived: {} },
         { id: 2, geometry: null, properties: { name: "水稻", crop: "粮食" }, derived: {} },
       ],
+      fieldFilters: {},
       onSelectedFieldChange: vi.fn(),
-      onAddFieldFilter: vi.fn(),
+      onFieldFiltersChange: vi.fn(),
     }
     const { rerender } = render(
       <StatsPanel
@@ -540,7 +623,7 @@ describe("App", () => {
     )
 
     await userEvent.type(screen.getByPlaceholderText("搜索统计值"), "茶")
-    expect(screen.queryByRole("button", { name: /水稻/ })).not.toBeInTheDocument()
+    expect(screen.queryByText("水稻")).not.toBeInTheDocument()
 
     rerender(
       <StatsPanel
@@ -550,88 +633,6 @@ describe("App", () => {
     )
 
     expect(screen.getByPlaceholderText("搜索统计值")).toHaveValue("")
-  })
-
-  it("searches field values beyond the facet cap before filtering", async () => {
-    const records = Array.from({ length: 250 }, (_, index) => ({
-      id: index + 1,
-      geometry: null,
-      properties: { name: `值${index}` },
-      derived: {},
-    }))
-    const filter: FilterState = {
-      searchText: "",
-      searchMode: "all",
-      searchFields: [],
-      visibleFields: ["name"],
-      includeHiddenFieldsInSearch: false,
-      exactSearch: false,
-      fieldFilters: {},
-      sort: null,
-    }
-    const onFilterChange = vi.fn()
-
-    render(
-      <FieldPanel
-        dataset={{
-          fileName: "values.kml",
-          totalRecords: records.length,
-          fields: [{ name: "name", source: "original" }],
-          records,
-          warnings: [],
-        }}
-        candidateRecords={records}
-        filter={filter}
-        onFilterChange={onFilterChange}
-      />,
-    )
-
-    await userEvent.click(screen.getByRole("button", { name: "name原始" }))
-    await userEvent.type(screen.getByPlaceholderText("搜索字段值"), "值249")
-    await userEvent.click(screen.getByRole("checkbox", { name: "值2491" }))
-
-    expect(onFilterChange).toHaveBeenCalledWith({
-      ...filter,
-      fieldFilters: { name: ["值249"] },
-    })
-  })
-
-  it("keeps selected facet values visible while a different value search is active", async () => {
-    const records = [
-      { id: 1, geometry: null, properties: { name: "茶树" }, derived: {} },
-      { id: 2, geometry: null, properties: { name: "水稻" }, derived: {} },
-    ]
-    const filter: FilterState = {
-      searchText: "",
-      searchMode: "all",
-      searchFields: [],
-      visibleFields: ["name"],
-      includeHiddenFieldsInSearch: false,
-      exactSearch: false,
-      fieldFilters: { name: ["茶树"] },
-      sort: null,
-    }
-
-    render(
-      <FieldPanel
-        dataset={{
-          fileName: "values.kml",
-          totalRecords: records.length,
-          fields: [{ name: "name", source: "original" }],
-          records,
-          warnings: [],
-        }}
-        candidateRecords={records}
-        filter={filter}
-        onFilterChange={vi.fn()}
-      />,
-    )
-
-    await userEvent.click(screen.getByRole("button", { name: "name原始" }))
-    await userEvent.type(screen.getByPlaceholderText("搜索字段值"), "水")
-
-    expect(screen.getByRole("checkbox", { name: "茶树1" })).toBeChecked()
-    expect(screen.getByRole("checkbox", { name: "水稻1" })).toBeInTheDocument()
   })
 
   it("resets dataset-specific field selections after opening another dataset", async () => {
@@ -653,14 +654,12 @@ describe("App", () => {
     await userEvent.click(openButton)
     await screen.findByText("tea.kml")
     await userEvent.selectOptions(screen.getByRole("combobox"), "name")
-    await userEvent.click(screen.getByRole("button", { name: "name原始" }))
     expect(screen.getAllByText("茶树").length).toBeGreaterThan(0)
 
     await userEvent.click(openButton)
     await screen.findByText("rice.kml")
 
     expect(screen.getByRole("combobox")).toHaveValue("admin_country")
-    expect(document.querySelector(".field-row.active")).toBeNull()
   })
 
   it("keeps the existing dataset when open_dataset rejects", async () => {

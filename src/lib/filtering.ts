@@ -5,6 +5,7 @@ import type {
   FilterState,
   StatsRow,
 } from "../types/geo"
+import { displayFieldValue } from "./display"
 
 const DEFAULT_VISIBLE_ORIGINAL_FIELD_COUNT = 30
 const FIELD_HEAVY_THRESHOLD = 40
@@ -27,7 +28,10 @@ export function getDefaultVisibleFields(fields: FieldDefinition[]): string[] {
 }
 
 export function getRecordValue(record: FeatureRecord, field: string): string | null {
-  if (field === "admin_country") return record.derived.admin_country ?? null
+  if (field === "admin_country") {
+    const value = record.derived.admin_country ?? null
+    return value === null ? null : displayFieldValue(value)
+  }
   if (field === "admin_level1") return record.derived.admin_level1 ?? null
   return normalizeFieldValue(record.properties[field])
 }

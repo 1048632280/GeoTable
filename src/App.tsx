@@ -359,18 +359,6 @@ export default function App() {
     }
   }
 
-  function addFieldFilter(field: string, value: string) {
-    const current = filter.fieldFilters[field] ?? []
-    if (current.includes(value)) return
-    setFilter({
-      ...filter,
-      fieldFilters: {
-        ...filter.fieldFilters,
-        [field]: [...current, value],
-      },
-    })
-  }
-
   const workbenchWidth = workbenchRef.current?.clientWidth || window.innerWidth
   const leftPaneRange = sidePaneRange("left", workbenchWidth)
   const rightPaneRange = sidePaneRange("right", workbenchWidth)
@@ -407,7 +395,6 @@ export default function App() {
       >
         <FieldPanel
           dataset={dataset}
-          candidateRecords={baseRecords}
           filter={filter}
           onFilterChange={setFilter}
         />
@@ -480,8 +467,9 @@ export default function App() {
           fields={visibleFields}
           records={statsRecords}
           selectedField={statsField}
+          fieldFilters={filter.fieldFilters}
           onSelectedFieldChange={setStatsField}
-          onAddFieldFilter={addFieldFilter}
+          onFieldFiltersChange={(fieldFilters) => setFilter((current) => ({ ...current, fieldFilters }))}
         />
       </section>
     </main>
