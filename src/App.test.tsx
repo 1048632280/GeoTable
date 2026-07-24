@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
+import { FieldPanel } from "./components/FieldPanel"
 import { StatsPanel } from "./components/StatsPanel"
-import type { Dataset } from "./types/geo"
+import type { Dataset, FilterState } from "./types/geo"
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -266,6 +267,72 @@ describe("App", () => {
 
     expect(document.querySelectorAll(".stats-row")).toHaveLength(200)
     expect(screen.getByRole("status")).toHaveTextContent("显示前 200 项，共 250 项")
+  })
+
+  it("searches statistic values beyond the rendered cap before filtering", async () => {
+    const records = Array.from({ length: 250 }, (_, index) => ({
+      id: index + 1,
+      geometry: null,
+      properties: { name: `值${index}` },
+      derived: {},
+    }))
+    const onAddFieldFilter = vi.fn()
+
+    render(
+      <StatsPanel
+        fields={[{ name: "name", source: "original" }]}
+        records={records}
+        selectedField="name"
+        onSelectedFieldChange={vi.fn()}
+        onAddFieldFilter={onAddFieldFilter}
+      />,
+    )
+
+    await userEvent.type(screen.getByPlaceholderText("搜索统计值"), "值249")
+    await userEvent.click(screen.getByRole("button", { name: /值249/ }))
+
+    expect(onAddFieldFilter).toHaveBeenCalledWith("name", "值249")
+  })
+
+  it("searches field values beyond the facet cap before filtering", async () => {
+    const records = Array.from({ length: 250 }, (_, index) => ({
+      id: index + 1,
+      geometry: null,
+      properties: { name: `值${index}` },
+      derived: {},
+    }))
+    const filter: FilterState = {
+      searchText: "",
+      searchMode: "all",
+      searchFields: [],
+      fieldFilters: {},
+      sort: null,
+    }
+    const onFilterChange = vi.fn()
+
+    render(
+      <FieldPanel
+        dataset={{
+          fileName: "values.kml",
+          totalRecords: records.length,
+          fields: [{ name: "name", source: "original" }],
+          records,
+          warnings: [],
+        }}
+        candidateRecords={records}
+        filter={filter}
+        onFilterChange={onFilterChange}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "name原始" }))
+    await userEvent.type(screen.getByPlaceholderText("搜索字段值"), "值249")
+    await userEvent.click(screen.getByRole("checkbox", { name: "值2491" }))
+
+    expect(onFilterChange).toHaveBeenCalledWith({
+      ...filter,
+      fieldFilters: { name: ["值249"] },
+    })
   })
 
   it("resets dataset-specific field selections after opening another dataset", async () => {

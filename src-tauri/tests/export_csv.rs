@@ -108,6 +108,48 @@ fn escapes_formula_leading_text_but_preserves_negative_numbers() {
 }
 
 #[test]
+fn escapes_control_character_formula_prefixes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("control-safe.csv");
+    let dataset = Dataset {
+        file_name: "safe.kml".to_string(),
+        total_records: 1,
+        fields: vec![
+            FieldDefinition {
+                name: "tab_formula".to_string(),
+                source: FieldSource::Original,
+            },
+            FieldDefinition {
+                name: "spaced_formula".to_string(),
+                source: FieldSource::Original,
+            },
+        ],
+        records: vec![FeatureRecord {
+            id: 1,
+            geometry: None,
+            properties: BTreeMap::from([
+                (
+                    "tab_formula".to_string(),
+                    FieldValue::String("\t=1+1".to_string()),
+                ),
+                (
+                    "spaced_formula".to_string(),
+                    FieldValue::String("   @SUM(1,1)".to_string()),
+                ),
+            ]),
+            derived: DerivedFields::default(),
+        }],
+        warnings: vec![],
+    };
+
+    write_csv(&path, &dataset, &[1]).expect("write safe csv");
+
+    let content = fs::read_to_string(path).expect("read csv");
+    assert!(content.contains("'\t=1+1"));
+    assert!(content.contains("'   @SUM(1,1)"));
+}
+
+#[test]
 fn replaces_existing_file_after_success_without_temp_residue() {
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("replace.csv");

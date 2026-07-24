@@ -88,11 +88,26 @@ fn export_cell(record: &FeatureRecord, field: &str) -> String {
 }
 
 fn escape_spreadsheet_text(value: &str) -> String {
-    if matches!(value.chars().next(), Some('=' | '+' | '-' | '@')) {
+    if is_spreadsheet_risky_text(value) {
         format!("'{value}")
     } else {
         value.to_string()
     }
+}
+
+fn is_spreadsheet_risky_text(value: &str) -> bool {
+    if matches!(
+        value.chars().next(),
+        Some('=' | '+' | '-' | '@' | '\t' | '\r' | '\n')
+    ) {
+        return true;
+    }
+
+    let trimmed = value.trim_start_matches(|character| {
+        matches!(character, ' ' | '\t' | '\r' | '\n')
+    });
+    trimmed.len() != value.len()
+        && matches!(trimmed.chars().next(), Some('=' | '+' | '-' | '@'))
 }
 
 fn create_sibling_temp_file(path: &Path) -> Result<(PathBuf, File), GeoTableError> {

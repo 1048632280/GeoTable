@@ -11,6 +11,8 @@ use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 use zip::ZipArchive;
 
+const MAX_KMZ_KML_BYTES: u64 = 128 * 1024 * 1024;
+
 pub fn import_kml_or_kmz(path: &Path) -> Result<Dataset, GeoTableError> {
     let root = if path
         .extension()
@@ -21,13 +23,11 @@ pub fn import_kml_or_kmz(path: &Path) -> Result<Dataset, GeoTableError> {
         let mut archive = ZipArchive::new(kmz)
             .map_err(|error| GeoTableError::FileRead(format!("无法读取 KMZ 压缩包：{error}")))?;
         let entry_index = select_kml_entry(&mut archive)?;
-        let mut entry = archive.by_index(entry_index).map_err(|error| {
+        let entry = archive.by_index(entry_index).map_err(|error| {
             GeoTableError::FileRead(format!("无法读取 KMZ 中的 KML 文档：{error}"))
         })?;
-        let mut contents = Vec::new();
-        entry.read_to_end(&mut contents).map_err(|error| {
-            GeoTableError::FileRead(format!("无法读取 KMZ 中的 KML 文档：{error}"))
-        })?;
+        let size = entry.size();
+        let contents = read_limited_kml_entry(entry, size)?;
         let mut reader = KmlReader::<_, f64>::from_reader(Cursor::new(contents));
         reader
             .read()
@@ -86,6 +86,31 @@ pub fn import_kml_or_kmz(path: &Path) -> Result<Dataset, GeoTableError> {
         records,
         warnings,
     })
+}
+
+fn read_limited_kml_entry<R: Read>(
+    reader: R,
+    uncompressed_size: u64,
+) -> Result<Vec<u8>, GeoTableError> {
+    if uncompressed_size > MAX_KMZ_KML_BYTES {
+        return Err(GeoTableError::FileRead(format!(
+            "KMZ 中的 KML 文档超过 {} MB 限制",
+            MAX_KMZ_KML_BYTES / 1024 / 1024
+        )));
+    }
+
+    let mut limited = reader.take(MAX_KMZ_KML_BYTES + 1);
+    let mut contents = Vec::new();
+    limited.read_to_end(&mut contents).map_err(|error| {
+        GeoTableError::FileRead(format!("无法读取 KMZ 中的 KML 文档：{error}"))
+    })?;
+    if contents.len() as u64 > MAX_KMZ_KML_BYTES {
+        return Err(GeoTableError::FileRead(format!(
+            "KMZ 中的 KML 文档超过 {} MB 限制",
+            MAX_KMZ_KML_BYTES / 1024 / 1024
+        )));
+    }
+    Ok(contents)
 }
 
 fn select_kml_entry(archive: &mut ZipArchive<File>) -> Result<usize, GeoTableError> {
@@ -278,4 +303,18 @@ fn resolve_source_field_name(
     field_names.insert(output_name.clone());
     field_mapping.insert(source_name.to_string(), output_name.clone());
     output_name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn rejects_oversized_kmz_kml_entry_before_reading() {
+        let error = read_limited_kml_entry(Cursor::new(Vec::<u8>::new()), MAX_KMZ_KML_BYTES + 1)
+            .expect_err("oversized entry fails");
+
+        assert!(error.user_message().contains("超过 128 MB 限制"));
+    }
 }

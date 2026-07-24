@@ -12,11 +12,16 @@ type FieldPanelProps = {
 
 export function FieldPanel({ dataset, candidateRecords, filter, onFilterChange }: FieldPanelProps) {
   const [fieldSearch, setFieldSearch] = useState("")
+  const [valueSearch, setValueSearch] = useState("")
   const [selectedField, setSelectedField] = useState<string | null>(null)
 
   useEffect(() => {
     setSelectedField(null)
   }, [dataset])
+
+  useEffect(() => {
+    setValueSearch("")
+  }, [dataset, selectedField])
 
   const fields = useMemo(() => {
     const query = fieldSearch.trim().toLocaleLowerCase()
@@ -27,11 +32,15 @@ export function FieldPanel({ dataset, candidateRecords, filter, onFilterChange }
 
   const values = useMemo(() => {
     if (!dataset || !selectedField) return []
+    const query = valueSearch.trim().toLocaleLowerCase()
     const { [selectedField]: _excluded, ...fieldFilters } = filter.fieldFilters
     const records = applyFieldFilters(candidateRecords, fieldFilters)
     const countedValues = getUniqueValues(records, selectedField)
+    const matchingValues = query
+      ? countedValues.filter((item) => item.value.toLocaleLowerCase().includes(query))
+      : countedValues
     const selectedValues = filter.fieldFilters[selectedField] ?? []
-    const values = countedValues.filter(
+    const values = matchingValues.filter(
       (item, index) => index < 200 || selectedValues.includes(item.value),
     )
     const countedValueSet = new Set(countedValues.map((item) => item.value))
@@ -39,7 +48,7 @@ export function FieldPanel({ dataset, candidateRecords, filter, onFilterChange }
       if (!countedValueSet.has(value)) values.push({ value, count: 0 })
     }
     return values
-  }, [candidateRecords, dataset, filter.fieldFilters, selectedField])
+  }, [candidateRecords, dataset, filter.fieldFilters, selectedField, valueSearch])
 
   function toggleValue(value: string) {
     if (!selectedField) return
@@ -85,6 +94,14 @@ export function FieldPanel({ dataset, candidateRecords, filter, onFilterChange }
           </button>
         ))}
       </div>
+      {selectedField && (
+        <input
+          className="text-input"
+          value={valueSearch}
+          onChange={(event) => setValueSearch(event.target.value)}
+          placeholder="搜索字段值"
+        />
+      )}
       <div className="value-list">
         {values.map((item) => {
           const checked = selectedField

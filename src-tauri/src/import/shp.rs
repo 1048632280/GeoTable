@@ -121,14 +121,12 @@ fn open_shapefile_reader(
 ) -> Result<(ShapefileReader, BTreeMap<String, String>), GeoTableError> {
     let shape_reader =
         ShapeReader::from_path(path).map_err(|error| GeoTableError::FileRead(error.to_string()))?;
-    let dbf_source = File::open(path.with_extension("dbf"))
-        .map(BufReader::new)
-        .map_err(|error| GeoTableError::FileRead(error.to_string()))?;
+    let dbf_path = path.with_extension("dbf");
     let dbf_reader = match read_cpg_encoding(path) {
         Some(encoding) => dbase::ReaderBuilder::new()
             .with_encoding(encoding)
-            .build(dbf_source),
-        None => dbase::Reader::new(dbf_source),
+            .open(&dbf_path),
+        None => dbase::Reader::from_path(&dbf_path),
     }
     .map_err(|error| GeoTableError::FileRead(error.to_string()))?;
 
