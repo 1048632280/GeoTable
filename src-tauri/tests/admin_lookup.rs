@@ -236,6 +236,33 @@ fn production_admin1_parent_codes_exist_in_china_pov_admin0() {
 }
 
 #[test]
+fn production_admin1_parent_names_match_china_pov_admin0() {
+    let index = production_admin_index().expect("production index");
+    let country_names = index
+        .countries
+        .iter()
+        .filter_map(|polygon| Some((polygon.code.as_deref()?, polygon.name.as_str())))
+        .collect::<BTreeMap<_, _>>();
+
+    for polygon in &index.level1 {
+        let country_code = polygon
+            .country_code
+            .as_deref()
+            .expect("production Admin1 feature has a parent country code");
+        let expected_country_name = country_names
+            .get(country_code)
+            .expect("production Admin1 parent code exists in China POV Admin0");
+
+        assert_eq!(
+            polygon.country.as_deref(),
+            Some(*expected_country_name),
+            "Admin1 {} must use its China POV Admin0 parent name for {country_code}",
+            polygon.name
+        );
+    }
+}
+
+#[test]
 fn production_boundary_index_is_reused() {
     let first = production_admin_index().expect("first index");
     let second = production_admin_index().expect("second index");
