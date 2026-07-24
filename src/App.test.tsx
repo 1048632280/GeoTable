@@ -338,6 +338,9 @@ describe("App", () => {
       searchText: "",
       searchMode: "all",
       searchFields: [],
+      visibleFields: ["name"],
+      includeHiddenFieldsInSearch: false,
+      exactSearch: false,
       fieldFilters: {},
       sort: null,
     }
@@ -377,6 +380,9 @@ describe("App", () => {
       searchText: "",
       searchMode: "all",
       searchFields: [],
+      visibleFields: ["name"],
+      includeHiddenFieldsInSearch: false,
+      exactSearch: false,
       fieldFilters: { name: ["茶树"] },
       sort: null,
     }

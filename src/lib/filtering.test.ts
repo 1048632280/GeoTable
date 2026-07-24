@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
-import type { FeatureRecord, FilterState } from "../types/geo"
-import { applyFieldFilters, applyFilters, buildStats, getUniqueValues, sortRecords } from "./filtering"
+import type { FeatureRecord, FieldDefinition, FilterState } from "../types/geo"
+import {
+  applyFieldFilters,
+  applyFilters,
+  buildStats,
+  getDefaultVisibleFields,
+  getUniqueValues,
+  sortRecords,
+} from "./filtering"
 
 const records: FeatureRecord[] = [
   {
@@ -33,6 +40,9 @@ const emptyFilter: FilterState = {
   searchText: "",
   searchMode: "all",
   searchFields: [],
+  visibleFields: ["name", "crop", "samples", "admin_country", "admin_level1"],
+  includeHiddenFieldsInSearch: false,
+  exactSearch: false,
   fieldFilters: {},
   sort: null,
 }
@@ -51,6 +61,64 @@ describe("filtering", () => {
       searchFields: ["admin_country"],
     })
     expect(filtered.map((record) => record.id)).toEqual([1, 2])
+  })
+
+  it("excludes hidden fields from global search by default", () => {
+    const filtered = applyFilters(records, {
+      ...emptyFilter,
+      searchText: "云南",
+      visibleFields: ["name", "crop", "samples", "admin_country"],
+    })
+
+    expect(filtered).toEqual([])
+  })
+
+  it("includes hidden fields in search when enabled", () => {
+    const filtered = applyFilters(records, {
+      ...emptyFilter,
+      searchText: "云南",
+      visibleFields: ["name", "crop", "samples", "admin_country"],
+      includeHiddenFieldsInSearch: true,
+    })
+
+    expect(filtered.map((record) => record.id)).toEqual([1])
+  })
+
+  it("uses exact equality instead of substring matching when enabled", () => {
+    const filtered = applyFilters(records, {
+      ...emptyFilter,
+      searchText: "茶树",
+      exactSearch: true,
+    })
+
+    expect(filtered.map((record) => record.id)).toEqual([1, 3])
+  })
+
+  it("shows every field by default when there are 40 fields", () => {
+    const fields: FieldDefinition[] = Array.from({ length: 40 }, (_, index) => ({
+      name: `field_${index + 1}`,
+      source: "original",
+    }))
+
+    expect(getDefaultVisibleFields(fields)).toEqual(fields.map((field) => field.name))
+  })
+
+  it("shows derived fields and the first 30 original fields when there are more than 40 fields", () => {
+    const originalFields: FieldDefinition[] = Array.from({ length: 39 }, (_, index) => ({
+      name: `field_${index + 1}`,
+      source: "original",
+    }))
+    const derivedFields: FieldDefinition[] = [
+      { name: "admin_country", source: "derived" },
+      { name: "admin_level1", source: "derived" },
+    ]
+    const fields = [...originalFields, ...derivedFields]
+
+    expect(getDefaultVisibleFields(fields)).toEqual([
+      ...originalFields.slice(0, 30).map((field) => field.name),
+      "admin_country",
+      "admin_level1",
+    ])
   })
 
   it("combines search and field filters", () => {

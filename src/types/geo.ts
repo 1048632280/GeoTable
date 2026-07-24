@@ -48,6 +48,9 @@ export type FilterState = {
   searchText: string
   searchMode: TextSearchMode
   searchFields: string[]
+  visibleFields: string[]
+  includeHiddenFieldsInSearch: boolean
+  exactSearch: boolean
   fieldFilters: Record<string, string[]>
   sort: {
     field: string

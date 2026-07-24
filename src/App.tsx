@@ -5,7 +5,12 @@ import { FieldPanel } from "./components/FieldPanel"
 import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
 import { Toolbar } from "./components/Toolbar"
-import { applyFieldFilters, applyFilters, sortRecords } from "./lib/filtering"
+import {
+  applyFieldFilters,
+  applyFilters,
+  getDefaultVisibleFields,
+  sortRecords,
+} from "./lib/filtering"
 import type { Dataset, FilterState, ImportStatus } from "./types/geo"
 import "./styles.css"
 
@@ -13,6 +18,9 @@ const initialFilter: FilterState = {
   searchText: "",
   searchMode: "all",
   searchFields: [],
+  visibleFields: [],
+  includeHiddenFieldsInSearch: false,
+  exactSearch: false,
   fieldFilters: {},
   sort: null,
 }
@@ -56,9 +64,20 @@ export default function App() {
           searchText: filter.searchText,
           searchMode: filter.searchMode,
           searchFields: filter.searchFields,
+          visibleFields: filter.visibleFields,
+          includeHiddenFieldsInSearch: filter.includeHiddenFieldsInSearch,
+          exactSearch: filter.exactSearch,
         })
       : [],
-    [dataset, filter.searchFields, filter.searchMode, filter.searchText],
+    [
+      dataset,
+      filter.exactSearch,
+      filter.includeHiddenFieldsInSearch,
+      filter.searchFields,
+      filter.searchMode,
+      filter.searchText,
+      filter.visibleFields,
+    ],
   )
   const filteredRecords = useMemo(() => {
     const records = applyFieldFilters(baseRecords, filter.fieldFilters)
@@ -88,7 +107,7 @@ export default function App() {
 
       const result = await invoke<Dataset>("open_dataset", { path: selected })
       setDataset(result)
-      setFilter(initialFilter)
+      setFilter({ ...initialFilter, visibleFields: getDefaultVisibleFields(result.fields) })
       setStatsField(
         result.fields.some((field) => field.name === "admin_country")
           ? "admin_country"

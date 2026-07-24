@@ -1,4 +1,30 @@
-import type { FeatureRecord, FieldValue, FilterState, StatsRow } from "../types/geo"
+import type {
+  FeatureRecord,
+  FieldDefinition,
+  FieldValue,
+  FilterState,
+  StatsRow,
+} from "../types/geo"
+
+const DEFAULT_VISIBLE_ORIGINAL_FIELD_COUNT = 30
+const FIELD_HEAVY_THRESHOLD = 40
+
+export function getDefaultVisibleFields(fields: FieldDefinition[]): string[] {
+  if (fields.length <= FIELD_HEAVY_THRESHOLD) {
+    return fields.map((field) => field.name)
+  }
+
+  const visibleOriginalFields = new Set(
+    fields
+      .filter((field) => field.source === "original")
+      .slice(0, DEFAULT_VISIBLE_ORIGINAL_FIELD_COUNT)
+      .map((field) => field.name),
+  )
+
+  return fields
+    .filter((field) => field.source === "derived" || visibleOriginalFields.has(field.name))
+    .map((field) => field.name)
+}
 
 export function getRecordValue(record: FeatureRecord, field: string): string | null {
   if (field === "admin_country") return record.derived.admin_country ?? null
@@ -8,13 +34,25 @@ export function getRecordValue(record: FeatureRecord, field: string): string | n
 
 export function applyFilters(records: FeatureRecord[], filter: FilterState): FeatureRecord[] {
   const searchText = filter.searchText.trim().toLocaleLowerCase()
-  const searchFields =
+  const allowedSearchFields = filter.includeHiddenFieldsInSearch
+    ? null
+    : new Set(filter.visibleFields)
+  const selectedSearchFields =
     filter.searchMode === "fields" && filter.searchFields.length > 0
       ? filter.searchFields
       : null
 
   let result = records.filter((record) => {
-    if (searchText && !recordMatchesSearch(record, searchText, searchFields)) {
+    if (
+      searchText &&
+      !recordMatchesSearch(
+        record,
+        searchText,
+        selectedSearchFields,
+        allowedSearchFields,
+        filter.exactSearch,
+      )
+    ) {
       return false
     }
 
@@ -83,10 +121,12 @@ export function sortRecords(
 function recordMatchesSearch(
   record: FeatureRecord,
   searchText: string,
-  searchFields: string[] | null,
+  selectedSearchFields: string[] | null,
+  allowedSearchFields: Set<string> | null,
+  exactSearch: boolean,
 ): boolean {
   const fields =
-    searchFields ??
+    selectedSearchFields ??
     Array.from(
       new Set([
         ...Object.keys(record.properties),
@@ -96,8 +136,12 @@ function recordMatchesSearch(
     )
 
   return fields.some((field) => {
+    if (allowedSearchFields && !allowedSearchFields.has(field)) return false
     const value = getRecordValue(record, field)
-    return value !== null && value.toLocaleLowerCase().includes(searchText)
+    if (value === null) return false
+
+    const normalizedValue = value.toLocaleLowerCase()
+    return exactSearch ? normalizedValue === searchText : normalizedValue.includes(searchText)
   })
 }
 
