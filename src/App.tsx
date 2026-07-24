@@ -1,7 +1,15 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { FieldPanel } from "./components/FieldPanel"
 import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
@@ -33,6 +41,7 @@ const RIGHT_PANE_MIN_WIDTH = 240
 const SPLITTER_WIDTH = 8
 const DEFAULT_LAYOUT = { left: 280, right: 300 }
 const SUPPORTED_IMPORT_EXTENSIONS = new Set(["shp", "kml", "kmz"])
+const KEYBOARD_RESIZE_STEP = 24
 
 type WorkbenchLayout = typeof DEFAULT_LAYOUT
 
@@ -86,6 +95,30 @@ function getStoredLayout(): WorkbenchLayout {
 function isSupportedImportPath(path: string): boolean {
   const extension = path.split(".").pop()?.toLowerCase()
   return extension !== undefined && SUPPORTED_IMPORT_EXTENSIONS.has(extension)
+}
+
+function sidePaneRange(
+  side: "left" | "right",
+  viewportWidth = window.innerWidth,
+): { min: number; max: number } {
+  const paneWidth = Math.max(0, viewportWidth - (SPLITTER_WIDTH * 2))
+  const availableSideWidth = paneWidth - CENTER_PANE_MIN_WIDTH
+  if (availableSideWidth < LEFT_PANE_MIN_WIDTH + RIGHT_PANE_MIN_WIDTH) {
+    const left = Math.max(0, Math.floor(availableSideWidth / 2))
+    const right = Math.max(0, Math.ceil(availableSideWidth / 2))
+    const fixedWidth = side === "left" ? left : right
+    return { min: fixedWidth, max: fixedWidth }
+  }
+
+  return side === "left"
+    ? {
+        min: LEFT_PANE_MIN_WIDTH,
+        max: availableSideWidth - RIGHT_PANE_MIN_WIDTH,
+      }
+    : {
+        min: RIGHT_PANE_MIN_WIDTH,
+        max: availableSideWidth - LEFT_PANE_MIN_WIDTH,
+      }
 }
 
 function withoutFieldFilter(filter: FilterState, field: string): FilterState {
@@ -268,6 +301,20 @@ export default function App() {
     ))
   }
 
+  function handleSplitterKeyDown(splitter: "left" | "right", event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+
+    event.preventDefault()
+    const direction = event.key === "ArrowRight" ? 1 : -1
+    const workbenchWidth = workbenchRef.current?.clientWidth || window.innerWidth
+    setLayout((current) => clampLayout(
+      splitter === "left"
+        ? { ...current, left: current.left + (direction * KEYBOARD_RESIZE_STEP) }
+        : { ...current, right: current.right - (direction * KEYBOARD_RESIZE_STEP) },
+      workbenchWidth,
+    ))
+  }
+
   async function handleOpen() {
     if (isOpeningRef.current) return
     isOpeningRef.current = true
@@ -324,6 +371,10 @@ export default function App() {
     })
   }
 
+  const workbenchWidth = workbenchRef.current?.clientWidth || window.innerWidth
+  const leftPaneRange = sidePaneRange("left", workbenchWidth)
+  const rightPaneRange = sidePaneRange("right", workbenchWidth)
+
   return (
     <main className="app-shell">
       <Toolbar
@@ -365,10 +416,15 @@ export default function App() {
           role="separator"
           aria-label="调整字段面板宽度"
           aria-orientation="vertical"
+          aria-valuemin={leftPaneRange.min}
+          aria-valuemax={leftPaneRange.max}
+          aria-valuenow={layout.left}
+          tabIndex={0}
           onPointerDown={(event) => handleSplitterPointerDown("left", event)}
           onPointerMove={handleSplitterPointerMove}
           onPointerUp={(event) => finishSplitterDrag(event.currentTarget)}
           onLostPointerCapture={() => finishSplitterDrag()}
+          onKeyDown={(event) => handleSplitterKeyDown("left", event)}
         />
         <div className="table-placeholder">
           <input
@@ -410,10 +466,15 @@ export default function App() {
           role="separator"
           aria-label="调整统计面板宽度"
           aria-orientation="vertical"
+          aria-valuemin={rightPaneRange.min}
+          aria-valuemax={rightPaneRange.max}
+          aria-valuenow={layout.right}
+          tabIndex={0}
           onPointerDown={(event) => handleSplitterPointerDown("right", event)}
           onPointerMove={handleSplitterPointerMove}
           onPointerUp={(event) => finishSplitterDrag(event.currentTarget)}
           onLostPointerCapture={() => finishSplitterDrag()}
+          onKeyDown={(event) => handleSplitterKeyDown("right", event)}
         />
         <StatsPanel
           fields={visibleFields}

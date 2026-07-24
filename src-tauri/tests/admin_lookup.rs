@@ -263,6 +263,18 @@ fn production_admin1_parent_names_match_china_pov_admin0() {
 }
 
 #[test]
+fn production_admin1_names_are_explicit() {
+    let index = production_admin_index().expect("production index");
+
+    for polygon in &index.level1 {
+        assert!(
+            !polygon.name.trim().is_empty() && polygon.name != "Unknown",
+            "production Admin1 feature must have an explicit name"
+        );
+    }
+}
+
+#[test]
 fn production_boundary_index_is_reused() {
     let first = production_admin_index().expect("first index");
     let second = production_admin_index().expect("second index");

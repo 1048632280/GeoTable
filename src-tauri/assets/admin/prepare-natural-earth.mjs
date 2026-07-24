@@ -67,24 +67,32 @@ function prepareAdmin0(source) {
 }
 
 function prepareAdmin1(source, countryNames) {
+  const features = [];
+  for (const feature of source.features) {
+    const properties = feature.properties;
+    const sourceCountryCode = stringProperty(properties, "adm0_a3") ?? "-99";
+    const isTaiwan = sourceCountryCode === "TWN";
+    const countryCode = ADMIN1_PARENT_CODE_OVERRIDES.get(sourceCountryCode) ?? sourceCountryCode;
+    const name = isTaiwan ? "台湾省" : (
+      stringProperty(properties, "name_zh") ?? stringProperty(properties, "name")
+    );
+    if (!name) continue;
+
+    features.push({
+      type: "Feature",
+      properties: {
+        name,
+        country: countryNames.get(countryCode) ?? stringProperty(properties, "admin") ?? "Unknown",
+        country_code: countryCode,
+        code: stringProperty(properties, "adm1_code") ?? "-99",
+      },
+      geometry: feature.geometry,
+    });
+  }
+
   return {
     type: "FeatureCollection",
-    features: source.features.map((feature) => {
-      const properties = feature.properties;
-      const sourceCountryCode = stringProperty(properties, "adm0_a3") ?? "-99";
-      const isTaiwan = sourceCountryCode === "TWN";
-      const countryCode = ADMIN1_PARENT_CODE_OVERRIDES.get(sourceCountryCode) ?? sourceCountryCode;
-      return {
-        type: "Feature",
-        properties: {
-          name: isTaiwan ? "台湾省" : displayName(properties, "name_zh", "name"),
-          country: countryNames.get(countryCode) ?? stringProperty(properties, "admin") ?? "Unknown",
-          country_code: countryCode,
-          code: stringProperty(properties, "adm1_code") ?? "-99",
-        },
-        geometry: feature.geometry,
-      };
-    }),
+    features,
   };
 }
 

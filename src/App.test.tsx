@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
@@ -116,6 +116,31 @@ describe("App", () => {
     })
   })
 
+  it("supports keyboard resizing and exposes splitter ranges", () => {
+    render(<App />)
+
+    const leftSplitter = screen.getByRole("separator", { name: "调整字段面板宽度" })
+    const rightSplitter = screen.getByRole("separator", { name: "调整统计面板宽度" })
+    expect(leftSplitter).toHaveAttribute("aria-valuemin", "220")
+    expect(leftSplitter).toHaveAttribute("aria-valuemax", "508")
+    expect(leftSplitter).toHaveAttribute("aria-valuenow", "280")
+    expect(rightSplitter).toHaveAttribute("aria-valuemin", "240")
+    expect(rightSplitter).toHaveAttribute("aria-valuemax", "528")
+    expect(rightSplitter).toHaveAttribute("aria-valuenow", "300")
+
+    fireEvent.keyDown(leftSplitter, { key: "ArrowRight" })
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "304px 8px minmax(260px, 1fr) 8px 300px",
+    })
+    expect(leftSplitter).toHaveAttribute("aria-valuenow", "304")
+
+    fireEvent.keyDown(rightSplitter, { key: "ArrowLeft" })
+    expect(document.querySelector(".workbench-grid")).toHaveStyle({
+      gridTemplateColumns: "304px 8px minmax(260px, 1fr) 8px 324px",
+    })
+    expect(rightSplitter).toHaveAttribute("aria-valuenow", "324")
+  })
+
   it("uses a fitting fallback layout for narrow viewports and invalid saved values", () => {
     setViewportWidth(800)
     localStorage.setItem("geotable.workbench-layout", '{"left":"invalid","right":9999}')
@@ -172,7 +197,9 @@ describe("App", () => {
     const handler = onDragDropEventMock.mock.calls[0][0] as (event: {
       payload: { type: "drop"; paths: string[] }
     }) => void
-    handler({ payload: { type: "drop", paths: ["C:\\data\\tea.KMZ"] } })
+    await act(async () => {
+      handler({ payload: { type: "drop", paths: ["C:\\data\\tea.KMZ"] } })
+    })
 
     expect(await screen.findByText("已就绪")).toBeInTheDocument()
     expect(invokeMock).toHaveBeenCalledWith("open_dataset", { path: "C:\\data\\tea.KMZ" })
@@ -186,7 +213,9 @@ describe("App", () => {
     const handler = onDragDropEventMock.mock.calls[0][0] as (event: {
       payload: { type: "drop"; paths: string[] }
     }) => void
-    handler({ payload: { type: "drop", paths: ["C:\\data\\tea.csv"] } })
+    await act(async () => {
+      handler({ payload: { type: "drop", paths: ["C:\\data\\tea.csv"] } })
+    })
 
     expect(await screen.findByText("不支持的文件类型。请拖入 .shp、.kml 或 .kmz 文件。")).toBeInTheDocument()
     expect(invokeMock).not.toHaveBeenCalled()
