@@ -119,8 +119,31 @@ select {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  min-width: 836px;
   overflow: hidden;
+}
+
+.workbench-splitter {
+  position: relative;
+  z-index: 1;
+  cursor: col-resize;
+  background: #f5f7f8;
+  touch-action: none;
+}
+
+.workbench-splitter::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  content: "";
+  background: #d8dee3;
+}
+
+.workbench-splitter:hover::after,
+.workbench-splitter:focus-visible::after {
+  background: #136f63;
 }
 
 .side-panel,

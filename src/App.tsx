@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FieldPanel } from "./components/FieldPanel"
 import { DataTable } from "./components/DataTable"
 import { StatsPanel } from "./components/StatsPanel"
@@ -23,6 +24,53 @@ const initialFilter: FilterState = {
   exactSearch: false,
   fieldFilters: {},
   sort: null,
+}
+
+const LAYOUT_STORAGE_KEY = "geotable.workbench-layout"
+const LEFT_PANE_MIN_WIDTH = 220
+const CENTER_PANE_MIN_WIDTH = 360
+const RIGHT_PANE_MIN_WIDTH = 240
+const SPLITTER_WIDTH = 8
+const DEFAULT_LAYOUT = { left: 280, right: 300 }
+const SUPPORTED_IMPORT_EXTENSIONS = new Set(["shp", "kml", "kmz"])
+
+type WorkbenchLayout = typeof DEFAULT_LAYOUT
+
+function clampLayout(layout: WorkbenchLayout, viewportWidth = window.innerWidth): WorkbenchLayout {
+  if (!Number.isFinite(layout.left) || !Number.isFinite(layout.right)) return DEFAULT_LAYOUT
+
+  const paneWidth = Math.max(0, viewportWidth - (SPLITTER_WIDTH * 2))
+  const availableSideWidth = paneWidth - CENTER_PANE_MIN_WIDTH
+  if (availableSideWidth < LEFT_PANE_MIN_WIDTH + RIGHT_PANE_MIN_WIDTH) {
+    return DEFAULT_LAYOUT
+  }
+
+  let left = Math.max(LEFT_PANE_MIN_WIDTH, Math.round(layout.left))
+  let right = Math.max(RIGHT_PANE_MIN_WIDTH, Math.round(layout.right))
+  const overflow = left + right - availableSideWidth
+  if (overflow > 0) {
+    const rightReduction = Math.min(overflow, right - RIGHT_PANE_MIN_WIDTH)
+    right -= rightReduction
+    left = Math.max(LEFT_PANE_MIN_WIDTH, left - (overflow - rightReduction))
+  }
+  return { left, right }
+}
+
+function getStoredLayout(): WorkbenchLayout {
+  try {
+    const stored = localStorage.getItem(LAYOUT_STORAGE_KEY)
+    if (!stored) return DEFAULT_LAYOUT
+    const parsed = JSON.parse(stored) as Partial<WorkbenchLayout>
+    if (typeof parsed.left !== "number" || typeof parsed.right !== "number") return DEFAULT_LAYOUT
+    return clampLayout({ left: parsed.left, right: parsed.right })
+  } catch {
+    return DEFAULT_LAYOUT
+  }
+}
+
+function isSupportedImportPath(path: string): boolean {
+  const extension = path.split(".").pop()?.toLowerCase()
+  return extension !== undefined && SUPPORTED_IMPORT_EXTENSIONS.has(extension)
 }
 
 function withoutFieldFilter(filter: FilterState, field: string): FilterState {
@@ -55,7 +103,9 @@ export default function App() {
   const [status, setStatus] = useState<ImportStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [statsField, setStatsField] = useState("admin_country")
+  const [layout, setLayout] = useState<WorkbenchLayout>(getStoredLayout)
   const isOpeningRef = useRef(false)
+  const workbenchRef = useRef<HTMLElement | null>(null)
 
   const baseRecords = useMemo(
     () => dataset
@@ -103,11 +153,91 @@ export default function App() {
     )
   }, [statsField, visibleFields])
 
+  useEffect(() => {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout))
+  }, [layout])
+
+  useEffect(() => {
+    const updateLayoutForViewport = () => setLayout((current) => clampLayout(current))
+    window.addEventListener("resize", updateLayoutForViewport)
+    return () => window.removeEventListener("resize", updateLayoutForViewport)
+  }, [])
+
+  const importDataset = useCallback(async (path: string) => {
+    if (isOpeningRef.current) return
+    isOpeningRef.current = true
+    setStatus("loading")
+    setError(null)
+    try {
+      const result = await invoke<Dataset>("open_dataset", { path })
+      setDataset(result)
+      setFilter({ ...initialFilter, visibleFields: getDefaultVisibleFields(result.fields) })
+      setStatsField(
+        result.fields.some((field) => field.name === "admin_country")
+          ? "admin_country"
+          : (result.fields[0]?.name ?? ""),
+      )
+      setStatus(result.warnings.length > 0 ? "partial_failure" : "ready")
+    } catch (caught) {
+      setStatus("failed")
+      setError(String(caught))
+    } finally {
+      isOpeningRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+
+    void getCurrentWindow().onDragDropEvent((event) => {
+      if (event.payload.type !== "drop" || event.payload.paths.length === 0) return
+      const path = event.payload.paths[0]
+      if (!isSupportedImportPath(path)) {
+        setError("不支持的文件类型。请拖入 .shp、.kml 或 .kmz 文件。")
+        return
+      }
+      void importDataset(path)
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten()
+      else unlisten = nextUnlisten
+    }).catch(() => {
+      // 浏览器预览环境没有 Tauri 窗口 API，忽略监听失败。
+    })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [importDataset])
+
+  function handleSplitterPointerDown(splitter: "left" | "right", startX: number) {
+    const startLayout = layout
+    const workbenchWidth = workbenchRef.current?.clientWidth || window.innerWidth
+    const paneWidth = workbenchWidth - (SPLITTER_WIDTH * 2)
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const delta = event.clientX - startX
+      setLayout(() => clampLayout(
+        splitter === "left"
+          ? { ...startLayout, left: startLayout.left + delta }
+          : { ...startLayout, right: startLayout.right - delta },
+        paneWidth + (SPLITTER_WIDTH * 2),
+      ))
+    }
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+  }
+
   async function handleOpen() {
     if (isOpeningRef.current) return
     isOpeningRef.current = true
     const previousStatus = status
-    setStatus("loading")
     setError(null)
     try {
       const selected = await open({
@@ -118,16 +248,8 @@ export default function App() {
         setStatus(previousStatus)
         return
       }
-
-      const result = await invoke<Dataset>("open_dataset", { path: selected })
-      setDataset(result)
-      setFilter({ ...initialFilter, visibleFields: getDefaultVisibleFields(result.fields) })
-      setStatsField(
-        result.fields.some((field) => field.name === "admin_country")
-          ? "admin_country"
-          : (result.fields[0]?.name ?? ""),
-      )
-      setStatus(result.warnings.length > 0 ? "partial_failure" : "ready")
+      isOpeningRef.current = false
+      await importDataset(selected)
     } catch (caught) {
       setStatus("failed")
       setError(String(caught))
@@ -193,12 +315,23 @@ export default function App() {
           </ul>
         </section>
       )}
-      <section className="workbench-grid">
+      <section
+        ref={workbenchRef}
+        className="workbench-grid"
+        style={{ gridTemplateColumns: `${layout.left}px ${SPLITTER_WIDTH}px minmax(${CENTER_PANE_MIN_WIDTH}px, 1fr) ${SPLITTER_WIDTH}px ${layout.right}px` }}
+      >
         <FieldPanel
           dataset={dataset}
           candidateRecords={baseRecords}
           filter={filter}
           onFilterChange={setFilter}
+        />
+        <div
+          className="workbench-splitter"
+          role="separator"
+          aria-label="调整字段面板宽度"
+          aria-orientation="vertical"
+          onPointerDown={(event) => handleSplitterPointerDown("left", event.clientX)}
         />
         <div className="table-placeholder">
           <input
@@ -235,6 +368,13 @@ export default function App() {
             onSortChange={(sort) => setFilter({ ...filter, sort })}
           />
         </div>
+        <div
+          className="workbench-splitter"
+          role="separator"
+          aria-label="调整统计面板宽度"
+          aria-orientation="vertical"
+          onPointerDown={(event) => handleSplitterPointerDown("right", event.clientX)}
+        />
         <StatsPanel
           fields={visibleFields}
           records={statsRecords}

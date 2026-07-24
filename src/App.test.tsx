@@ -8,6 +8,10 @@ import { FieldPanel } from "./components/FieldPanel"
 import { StatsPanel } from "./components/StatsPanel"
 import type { Dataset, FilterState } from "./types/geo"
 
+const { onDragDropEventMock } = vi.hoisted(() => ({
+  onDragDropEventMock: vi.fn(),
+}))
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }))
@@ -15,6 +19,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
   save: vi.fn(),
+}))
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onDragDropEvent: onDragDropEventMock }),
 }))
 
 const openMock = vi.mocked(open)
@@ -65,6 +73,8 @@ function deferred<T>() {
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    onDragDropEventMock.mockResolvedValue(vi.fn())
     writeTextMock.mockResolvedValue(undefined)
   })
 
@@ -80,6 +90,47 @@ describe("App", () => {
     expect(screen.getByText("当前结果 0")).toBeInTheDocument()
     expect(screen.getByText("未打开文件")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "导出 CSV" })).toBeDisabled()
+  })
+
+  it("persists widths adjusted with workbench splitters", () => {
+    render(<App />)
+
+    const grid = document.querySelector<HTMLElement>(".workbench-grid")
+    const splitter = screen.getByRole("separator", { name: "调整字段面板宽度" })
+    fireEvent.pointerDown(splitter, { clientX: 280 })
+    fireEvent.pointerMove(window, { clientX: 340 })
+    fireEvent.pointerUp(window)
+
+    expect(grid).toHaveStyle({ gridTemplateColumns: "340px 8px minmax(360px, 1fr) 8px 300px" })
+    expect(localStorage.getItem("geotable.workbench-layout")).toBe('{"left":340,"right":300}')
+  })
+
+  it("imports supported files dropped onto the Tauri window", async () => {
+    invokeMock.mockResolvedValueOnce(teaDataset)
+    render(<App />)
+
+    await waitFor(() => expect(onDragDropEventMock).toHaveBeenCalled())
+    const handler = onDragDropEventMock.mock.calls[0][0] as (event: {
+      payload: { type: "drop"; paths: string[] }
+    }) => void
+    handler({ payload: { type: "drop", paths: ["C:\\data\\tea.KMZ"] } })
+
+    expect(await screen.findByText("已就绪")).toBeInTheDocument()
+    expect(invokeMock).toHaveBeenCalledWith("open_dataset", { path: "C:\\data\\tea.KMZ" })
+    expect(screen.getByText("tea.kml")).toBeInTheDocument()
+  })
+
+  it("shows a clear error for unsupported dropped files", async () => {
+    render(<App />)
+
+    await waitFor(() => expect(onDragDropEventMock).toHaveBeenCalled())
+    const handler = onDragDropEventMock.mock.calls[0][0] as (event: {
+      payload: { type: "drop"; paths: string[] }
+    }) => void
+    handler({ payload: { type: "drop", paths: ["C:\\data\\tea.csv"] } })
+
+    expect(await screen.findByText("不支持的文件类型。请拖入 .shp、.kml 或 .kmz 文件。")).toBeInTheDocument()
+    expect(invokeMock).not.toHaveBeenCalled()
   })
 
   it("updates search text and supports multi-value filters for the same field", async () => {
