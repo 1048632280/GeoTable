@@ -2,12 +2,13 @@ use crate::error::GeoTableError;
 use geo::{Coord, LineString, Polygon};
 use geojson::{GeoJson, GeometryValue, Position};
 use rstar::{RTree, RTreeObject, AABB};
-use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct AdminPolygon {
     pub name: String,
     pub country: Option<String>,
+    pub country_code: Option<String>,
+    pub code: Option<String>,
     pub bbox: [f64; 4],
     pub polygon: Polygon<f64>,
 }
@@ -24,26 +25,16 @@ impl RTreeObject for AdminPolygon {
 pub struct AdminIndex {
     pub countries: RTree<AdminPolygon>,
     pub level1: RTree<AdminPolygon>,
-    level1_countries: BTreeSet<String>,
 }
 
 impl AdminIndex {
     pub fn from_geojson_str(admin0: &str, admin1: &str) -> Result<Self, GeoTableError> {
         let countries = parse_polygons(admin0, "name", None)?;
         let level1 = parse_polygons(admin1, "name", Some("country"))?;
-        let level1_countries = level1
-            .iter()
-            .filter_map(|polygon| polygon.country.clone())
-            .collect();
         Ok(Self {
             countries: RTree::bulk_load(countries),
             level1: RTree::bulk_load(level1),
-            level1_countries,
         })
-    }
-
-    pub fn has_level1_coverage(&self, country: &str) -> bool {
-        self.level1_countries.contains(country)
     }
 }
 
@@ -79,6 +70,14 @@ fn parse_polygons(
                 .and_then(|value| value.as_str())
                 .map(ToString::to_string)
         });
+        let country_code = properties
+            .get("country_code")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string);
+        let code = properties
+            .get("code")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string);
 
         if let Some(geometry) = feature.geometry {
             match geometry.value {
@@ -88,6 +87,8 @@ fn parse_polygons(
                         polygons.push(AdminPolygon {
                             name,
                             country,
+                            country_code,
+                            code,
                             bbox,
                             polygon,
                         });
@@ -102,6 +103,8 @@ fn parse_polygons(
                             polygons.push(AdminPolygon {
                                 name: name.clone(),
                                 country: country.clone(),
+                                country_code: country_code.clone(),
+                                code: code.clone(),
                                 bbox,
                                 polygon,
                             });

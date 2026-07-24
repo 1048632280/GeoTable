@@ -143,9 +143,17 @@ fn enriches_points_with_country_and_level1() {
 }
 
 #[test]
-fn production_boundaries_cover_china_and_india_admin1() {
+fn production_boundaries_cover_global_admin1_with_china_pov() {
     let index = production_admin_index().expect("production index");
-    let dataset = dataset_with_points(&[(116.4074, 39.9042), (77.2090, 28.6139)], vec![]);
+    let dataset = dataset_with_points(
+        &[
+            (116.4074, 39.9042),
+            (77.2090, 28.6139),
+            (121.0, 23.7),
+            (-122.4194, 37.7749),
+        ],
+        vec![],
+    );
 
     let enriched = enrich_dataset(dataset, index);
 
@@ -165,6 +173,23 @@ fn production_boundaries_cover_china_and_india_admin1() {
         enriched.records[1].derived.admin_level1.as_deref(),
         Some("德里")
     );
+    assert_eq!(
+        enriched.records[2].derived.admin_country.as_deref(),
+        Some("中华人民共和国")
+    );
+    assert_eq!(
+        enriched.records[2].derived.admin_level1.as_deref(),
+        Some("台湾省")
+    );
+    assert_eq!(
+        enriched.records[3].derived.admin_country.as_deref(),
+        Some("美国")
+    );
+    assert_eq!(
+        enriched.records[3].derived.admin_level1.as_deref(),
+        Some("加利福尼亚州")
+    );
+    assert!(enriched.warnings.is_empty());
 }
 
 #[test]
@@ -173,19 +198,6 @@ fn production_boundary_index_is_reused() {
     let second = production_admin_index().expect("second index");
 
     assert!(std::ptr::eq(first, second));
-}
-
-#[test]
-fn warns_when_admin1_is_outside_packaged_coverage() {
-    let index = production_admin_index().expect("production index");
-    let enriched = enrich_dataset(dataset_with_points(&[(-122.4194, 37.7749)], vec![]), index);
-
-    assert!(enriched.records[0].derived.admin_country.is_some());
-    assert_eq!(enriched.records[0].derived.admin_level1, None);
-    assert!(enriched
-        .warnings
-        .iter()
-        .any(|warning| warning.message.contains("仅覆盖中国和印度")));
 }
 
 #[test]

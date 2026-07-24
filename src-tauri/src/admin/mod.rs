@@ -13,7 +13,7 @@ pub fn production_admin_index() -> Result<&'static AdminIndex, GeoTableError> {
         .get_or_init(|| {
             AdminIndex::from_geojson_str(
                 include_str!("../../assets/admin/admin0.geojson"),
-                include_str!("../../assets/admin/admin1.cn-in.geojson"),
+                include_str!("../../assets/admin/admin1.geojson"),
             )
             .map_err(|error| error.to_string())
         })
